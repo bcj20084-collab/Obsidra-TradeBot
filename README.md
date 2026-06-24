@@ -10,6 +10,12 @@ Default mode is **paper trading**. Do not enable live trading until you have pas
 - `packages/api` — Express + tRPC API for dashboard control and metrics
 - `packages/dashboard` — React/Vite dashboard with dark UI
 
+## Runtime
+
+- Node 24 is pinned in `.nvmrc` and CI.
+- pnpm workspace is used for all apps.
+- PostgreSQL is required for persistent trades, logs, metrics and ML weights.
+
 ## Start locally
 
 ```bash
@@ -18,6 +24,17 @@ pnpm install
 cp .env.example .env
 pnpm db:generate
 pnpm dev
+```
+
+## Production checks
+
+```bash
+pnpm db:generate
+pnpm db:migrate
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm preflight
 ```
 
 ## Safety defaults
@@ -32,7 +49,13 @@ pnpm dev
 
 ## Deployment
 
-Railway config is included in `railway.toml`. Add PostgreSQL on Railway and set the env vars from `.env.example`.
+Railway guidance is included in `docs/RAILWAY_DEPLOYMENT.md`. Add PostgreSQL on Railway and set the env vars from `.env.example`.
+
+## Operations
+
+- Runbook: `docs/OPERATIONS_RUNBOOK.md`
+- Incident response: `docs/INCIDENT_RESPONSE.md`
+- Live checklist: `docs/LIVE_TRADING_CHECKLIST.md`
 
 ## Important
 
