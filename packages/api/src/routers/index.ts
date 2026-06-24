@@ -5,6 +5,7 @@ import { metricsRouter } from "./metrics.js";
 import { tradesRouter } from "./trades.js";
 import { backtestRouter } from "./backtest.js";
 import { symbolsRouter } from "./symbols.js";
+import { auditRouter } from "./audit.js";
 
 export const appRouter = router({
   trades: tradesRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   control: controlRouter,
   backtest: backtestRouter,
   symbols: symbolsRouter,
+  audit: auditRouter,
 });
 
 export type AppRouter = typeof appRouter;
