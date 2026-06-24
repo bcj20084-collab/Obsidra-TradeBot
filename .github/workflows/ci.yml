@@ -17,6 +17,8 @@ jobs:
         run: corepack enable
       - name: Install
         run: pnpm install --no-frozen-lockfile
+      - name: Generate Prisma Client
+        run: DATABASE_URL="postgresql://local:local@localhost:5432/obsidra" pnpm db:generate
       - name: Typecheck
         run: pnpm typecheck
       - name: Test
