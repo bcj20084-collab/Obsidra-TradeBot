@@ -8,14 +8,16 @@ Implemented now:
 - engine/api/dashboard packages
 - Bybit V5 public WebSocket client
 - Bybit REST client wrapper with signed requests and rate limiting
-- MarketDataStore with candle buffers
+- MarketDataStore with candle buffers and tests
+- Data normalizers for kline, orderbook and ticker with tests
 - EMA, RSI, MACD, Bollinger Bands, ADX, ATR
 - Signal pipeline with trend, entry, ML adjustment and final checks
+- MLScorer tests
 - AdaptiveParams and CircuitBreaker with tests
 - RiskEngine gatekeeper with daily loss, drawdown, sizing and pre-flight checks
 - ExposureGuard, DailyLossGuard, PositionSizer and PreFlightCheck tests
 - OrderStateMachine and ExecutionJournal interfaces
-- OrderStateMachine transition tests
+- OrderStateMachine and ExecutionJournal tests
 - PaperSimulator and TradeLifecycleService foundation
 - HealthCheck heartbeat freshness with tests
 - TradeRepository and LogRepository around Prisma
@@ -23,12 +25,14 @@ Implemented now:
 - MLTrainer with persistent weights in PostgreSQL
 - MetricsCollector with default snapshot test
 - Telegram commands and Discord embed notifiers
+- Notification text helpers with tests
 - NotifierHub for parallel Telegram and Discord sends
 - Dashboard auth API pattern with httpOnly JWT cookie
 - API control router for pause, resume, idle mode and config
+- API auth protection test for tRPC routes
 - React dashboard pages with metrics cards, equity curve, live ticker, CSV preview and adaptive params panel
 - Prisma schema
-- Railway deployment guide and GitHub Actions CI
+- Railway deployment guide and GitHub Actions CI/deploy checks
 - Operations runbook and incident response guide
 - Live-trading checklist
 
