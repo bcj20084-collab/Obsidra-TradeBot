@@ -13,6 +13,8 @@ export class AdaptiveParams {
   private config: AdaptiveConfig = { ...DEFAULTS };
   private regime: MarketRegime = "NORMAL";
 
+  constructor(private readonly symbol = "ALL") {}
+
   async update(atrValue: number, averageAtr: number, adxValue: number, drawdownPct: number): Promise<void> {
     let regime: MarketRegime = "NORMAL";
     const next = { ...DEFAULTS };
@@ -36,7 +38,7 @@ export class AdaptiveParams {
     this.clamp(next);
     if (regime !== this.regime) {
       await prisma.adaptiveLog.create({
-        data: { regime, config: next, reason: `ATR=${atrValue}, avgATR=${averageAtr}, ADX=${adxValue}, DD=${drawdownPct}` },
+        data: { symbol: this.symbol, regime, config: next, reason: `ATR=${atrValue}, avgATR=${averageAtr}, ADX=${adxValue}, DD=${drawdownPct}` },
       });
     }
     this.regime = regime;

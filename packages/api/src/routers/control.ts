@@ -13,6 +13,9 @@ export const controlRouter = router({
           update: { status: input.status, reason: input.reason },
         }),
         prisma.botEvent.create({ data: { type: input.status, message: input.reason } }),
+        prisma.auditLog.create({
+          data: { action: `BOT_${input.status}`, actor: "dashboard", details: { reason: input.reason } },
+        }),
       ]);
       return { ok: true };
     }),

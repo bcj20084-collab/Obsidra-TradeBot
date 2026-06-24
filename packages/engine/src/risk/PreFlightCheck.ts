@@ -11,7 +11,7 @@ export class PreFlightCheck {
   ) {}
 
   async run(symbol: string): Promise<{ allowed: boolean; reason?: string }> {
-    const book = this.store.getOrderbook();
+    const book = this.store.getOrderbook(symbol);
     if (!book) return { allowed: false, reason: "Orderbook unavailable" };
     const spreadPct = ((book.ask - book.bid) / ((book.ask + book.bid) / 2)) * 100;
     if (spreadPct >= this.spreadMaxPct) return { allowed: false, reason: `Spread ${spreadPct.toFixed(4)}% too high` };

@@ -24,6 +24,8 @@ export class MetricsCollector {
     const generated = await prisma.journalEntry.count({ where: { type: "SIGNAL_GENERATED", createdAt: { gte: since } } });
     const rejected = await prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since } } });
     const daily = await prisma.dailyMetrics.findMany({ orderBy: { date: "asc" }, take: 30 });
+    const openTrades = await prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
+    const symbolNames = [...new Set(trades.map((trade) => trade.symbol))];
     this.cached = {
       totalPnlUsdt: pnl.reduce((sum, value) => sum + value, 0),
       totalPnlPct: ((equity - 10_000) / 10_000) * 100,
@@ -48,6 +50,19 @@ export class MetricsCollector {
       marketRegime: regime,
       adaptiveConfig,
       equityCurve: daily.map((item) => ({ date: item.date, equity: item.equityEnd })),
+      symbols: Object.fromEntries(symbolNames.map((symbol) => {
+        const symbolTrades = trades.filter((trade) => trade.symbol === symbol);
+        const symbolWins = symbolTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0);
+        return [symbol, {
+          pnl: symbolTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0),
+          trades: symbolTrades.length,
+          winRate: symbolTrades.length ? (symbolWins.length / symbolTrades.length) * 100 : 0,
+          openPosition: openTrades.some((trade) => trade.symbol === symbol),
+        }];
+      })),
+      totalExposureUsdt: openTrades.reduce((sum, trade) => sum + trade.positionSizeUsdt, 0),
+      openPositionsCount: openTrades.length,
+      mlAccuracy: (await prisma.mlWeights.findFirst({ orderBy: { trainedAt: "desc" } }))?.cvAccuracy ?? null,
     };
     return this.cached;
   }

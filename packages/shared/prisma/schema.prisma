@@ -29,6 +29,7 @@ model Trade {
   signalData       Json
   mlScore          Float?
   marketRegime     String?
+  closeReason      String?
   openedAt         DateTime?
   closedAt         DateTime?
   createdAt        DateTime  @default(now())
@@ -66,7 +67,8 @@ model JournalEntry {
 
 model DailyMetrics {
   id         String   @id @default(cuid())
-  date       String   @unique
+  date       String
+  symbol     String   @default("ALL")
   pnlUsdt    Float    @default(0)
   tradeCount Int      @default(0)
   winCount   Int      @default(0)
@@ -74,28 +76,89 @@ model DailyMetrics {
   equityEnd  Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@unique([date, symbol])
+}
+
+model HistoricalCandle {
+  id       String @id @default(cuid())
+  symbol   String
+  interval String
+  openTime BigInt
+  open     Float
+  high     Float
+  low      Float
+  close    Float
+  volume   Float
+  turnover Float
+
+  @@unique([symbol, interval, openTime])
+  @@index([symbol, interval, openTime])
 }
 
 model MlWeights {
   id         String   @id @default(cuid())
   weights    Json
+  symbol     String   @default("ALL")
+  bias       Float    @default(0)
+  cvAccuracy Float?
+  cvLogLoss  Float?
+  wfEfficiency Float?
   trainedAt  DateTime @default(now())
   tradeCount Int
+}
+
+model MlTrainingLog {
+  id                String   @id @default(cuid())
+  symbol            String
+  tradeCount        Int
+  cvAccuracy        Float
+  cvLogLoss         Float
+  wfEfficiency      Float
+  featureImportance Json
+  savedWeights      Boolean
+  rejectReason      String?
+  trainedAt         DateTime @default(now())
 }
 
 model AdaptiveLog {
   id        String   @id @default(cuid())
   regime    String
+  symbol    String   @default("ALL")
   config    Json
   reason    String
   createdAt DateTime @default(now())
 }
 
+model BacktestResult {
+  id          String   @id @default(cuid())
+  symbol      String
+  startDate   String
+  endDate     String
+  config      Json
+  metrics     Json
+  equityCurve Json
+  trades      Json
+  createdAt   DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}
+
 model BotEvent {
   id        String   @id @default(cuid())
   type      String
+  symbol    String?
   message   String
   data      Json?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  actor     String
+  details   Json
+  ipAddress String?
   createdAt DateTime @default(now())
 }
 

@@ -20,6 +20,9 @@ export const configRouter = router({
   events: protectedProcedure.query(() =>
     prisma.botEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
   ),
+  audit: protectedProcedure.query(() =>
+    prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
+  ),
   validate: protectedProcedure
     .input(z.object({
       minSignalScore: z.number().min(55).max(85),

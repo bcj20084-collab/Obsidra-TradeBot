@@ -17,8 +17,8 @@ export interface Orderbook {
 
 export class MarketDataStore {
   private readonly candles = new Map<string, Candle[]>();
-  private ticker?: Ticker;
-  private orderbook?: Orderbook;
+  private readonly tickers = new Map<string, Ticker>();
+  private readonly orderbooks = new Map<string, Orderbook>();
 
   constructor(private readonly maxCandles = 500) {}
 
@@ -37,18 +37,18 @@ export class MarketDataStore {
   }
 
   setTicker(ticker: Ticker): void {
-    this.ticker = ticker;
+    this.tickers.set(ticker.symbol, ticker);
   }
 
-  getTicker(): Ticker | undefined {
-    return this.ticker;
+  getTicker(symbol?: string): Ticker | undefined {
+    return symbol ? this.tickers.get(symbol) : this.tickers.values().next().value;
   }
 
   setOrderbook(orderbook: Orderbook): void {
-    this.orderbook = orderbook;
+    this.orderbooks.set(orderbook.symbol, orderbook);
   }
 
-  getOrderbook(): Orderbook | undefined {
-    return this.orderbook;
+  getOrderbook(symbol?: string): Orderbook | undefined {
+    return symbol ? this.orderbooks.get(symbol) : this.orderbooks.values().next().value;
   }
 }

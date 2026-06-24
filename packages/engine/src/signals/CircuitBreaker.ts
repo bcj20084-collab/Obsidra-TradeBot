@@ -1,6 +1,7 @@
 export class CircuitBreaker {
   private active = false;
   private reason: string | undefined;
+  private consecutiveLosses = 0;
 
   trip(reason: string): void {
     this.active = true;
@@ -12,7 +13,12 @@ export class CircuitBreaker {
     this.reason = undefined;
   }
 
-  get state(): { active: boolean; reason?: string } {
-    return this.reason ? { active: this.active, reason: this.reason } : { active: this.active };
+  recordTrade(pnlUsdt: number): void {
+    this.consecutiveLosses = pnlUsdt < 0 ? this.consecutiveLosses + 1 : 0;
+    if (this.consecutiveLosses >= 3) this.trip(`${this.consecutiveLosses} consecutive losses`);
+  }
+
+  get state(): { active: boolean; reason?: string; consecutiveLosses: number } {
+    return this.reason ? { active: this.active, reason: this.reason, consecutiveLosses: this.consecutiveLosses } : { active: this.active, consecutiveLosses: this.consecutiveLosses };
   }
 }

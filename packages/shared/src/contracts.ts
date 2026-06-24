@@ -31,6 +31,7 @@ export interface AdaptiveConfig {
 }
 
 export interface SignalResult {
+  symbol?: string;
   direction: Direction;
   score: number;
   entryPrice: number;
@@ -40,6 +41,9 @@ export interface SignalResult {
   indicators: Record<string, number>;
   mlAdjustment: number;
   regime: MarketRegime;
+  trendScore?: number;
+  entryScore?: number;
+  timestamp?: number;
 }
 
 export interface LiveMetrics {
@@ -66,4 +70,8 @@ export interface LiveMetrics {
   marketRegime: MarketRegime;
   adaptiveConfig: AdaptiveConfig;
   equityCurve: Array<{ date: string; equity: number }>;
+  symbols?: Record<string, { pnl: number; trades: number; winRate: number; openPosition: boolean }>;
+  totalExposureUsdt?: number;
+  openPositionsCount?: number;
+  mlAccuracy?: number | null;
 }

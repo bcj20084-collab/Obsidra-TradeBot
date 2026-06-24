@@ -13,6 +13,7 @@ export interface RiskDecision {
   stopLossPrice: number;
   takeProfitPrice: number;
   trailingStopPct: number;
+  riskRewardRatio?: number;
 }
 
 export class RiskEngine {
@@ -20,13 +21,14 @@ export class RiskEngine {
 
   constructor(
     dailyLossLimit: number,
+    weeklyLossLimit: number,
     private readonly maxDrawdownPct: number,
     private readonly maxPositionUsdt: number,
     private readonly preflight: PreFlightCheck,
     private readonly client: BybitRestClient,
     private readonly adaptive: AdaptiveParams,
   ) {
-    this.dailyLossGuard = new DailyLossGuard(dailyLossLimit);
+    this.dailyLossGuard = new DailyLossGuard(dailyLossLimit, weeklyLossLimit);
   }
 
   async approve(symbol: string, signal: SignalResult): Promise<RiskDecision> {
@@ -38,6 +40,7 @@ export class RiskEngine {
       stopLossPrice: signal.stopLoss,
       takeProfitPrice: signal.takeProfit,
       trailingStopPct: this.adaptive.snapshot.config.trailingStopPct,
+      riskRewardRatio: 0,
     });
     const daily = await this.dailyLossGuard.check();
     if (!daily.allowed) return reject(`Daily loss limit reached: ${daily.realizedPnl.toFixed(2)} USDT`);
@@ -60,6 +63,10 @@ export class RiskEngine {
     const atrValue = signal.indicators.atr ?? 0;
     const atrLeverage = atrValue > 0 ? 0.02 / (atrValue / signal.entryPrice) : 1;
     const leverage = Math.max(1, Math.min(config.leverageMax, Math.floor(atrLeverage)));
+    const riskDistance = Math.abs(signal.entryPrice - signal.stopLoss);
+    const rewardDistance = Math.abs(signal.takeProfit - signal.entryPrice);
+    const riskRewardRatio = rewardDistance / Math.max(riskDistance, Number.EPSILON);
+    if (riskRewardRatio < 1.5) return reject(`Risk/reward ${riskRewardRatio.toFixed(2)} is below 1.5`);
     return {
       approved: true,
       positionSizeUsdt,
@@ -67,6 +74,7 @@ export class RiskEngine {
       stopLossPrice: signal.stopLoss,
       takeProfitPrice: signal.takeProfit,
       trailingStopPct: config.trailingStopPct,
+      riskRewardRatio,
     };
   }
 }

@@ -18,9 +18,11 @@ const FEATURE_COUNT = 17;
 export class MLScorer {
   private weights = Array<number>(FEATURE_COUNT + 1).fill(0);
 
+  constructor(private readonly symbol = "ALL") {}
+
   async initialize(): Promise<void> {
-    const latest = await prisma.mlWeights.findFirst({ orderBy: { trainedAt: "desc" } });
-    if (latest && Array.isArray(latest.weights)) this.weights = latest.weights as number[];
+    const latest = await prisma.mlWeights.findFirst({ where: { symbol: this.symbol }, orderBy: { trainedAt: "desc" } });
+    if (latest && Array.isArray(latest.weights)) this.weights = [latest.bias, ...(latest.weights as number[])];
   }
 
   score(features: MlFeatures): number {
@@ -32,7 +34,7 @@ export class MLScorer {
 
   async retrain(): Promise<void> {
     const trades = await prisma.trade.findMany({
-      where: { closedAt: { gte: new Date(Date.now() - 30 * 86_400_000) }, pnlUsdt: { not: null } },
+      where: { symbol: this.symbol, closedAt: { gte: new Date(Date.now() - 30 * 86_400_000) }, pnlUsdt: { not: null } },
       orderBy: { closedAt: "asc" },
     });
     if (trades.length < 50 || trades.length % 50 !== 0) return;
@@ -49,7 +51,7 @@ export class MLScorer {
         x.forEach((value, index) => (this.weights[index + 1]! += learningRate * error * value));
       }
     }
-    await prisma.mlWeights.create({ data: { weights: this.weights, tradeCount: trades.length } });
+    await prisma.mlWeights.create({ data: { symbol: this.symbol, bias: this.weights[0] ?? 0, weights: this.weights.slice(1), tradeCount: trades.length } });
   }
 
   private vectorize(features: MlFeatures): number[] {

@@ -16,7 +16,7 @@ export class SignalEngine {
   evaluate(symbol: string): SignalResult | null {
     const h4 = this.store.getCandles(symbol, "240");
     const m15 = this.store.getCandles(symbol, "15");
-    const ticker = this.store.getTicker();
+    const ticker = this.store.getTicker(symbol);
     if (h4.length < 80 || m15.length < 60 || !ticker) return null;
     const h4Close = h4.map((c) => c.close);
     const ema21 = ema(h4Close, 21).at(-1)!;
@@ -67,6 +67,7 @@ export class SignalEngine {
     const stopLoss = direction === "LONG" ? price - config.slMultiplier * atrValue : price + config.slMultiplier * atrValue;
     const takeProfit = direction === "LONG" ? price + config.tpMultiplier * atrValue : price - config.tpMultiplier * atrValue;
     return {
+      symbol,
       direction,
       score: Math.round(score),
       entryPrice: price,
@@ -76,6 +77,9 @@ export class SignalEngine {
       indicators: { ema21, ema55, adx: adxValue, rsi: rsiValue, macd: macdNow.macd, atr: atrValue, bbLower: bb.lower, bbUpper: bb.upper },
       mlAdjustment,
       regime,
+      trendScore: 40,
+      entryScore: baseScore,
+      timestamp: Date.now(),
     };
   }
 }
