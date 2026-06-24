@@ -99,14 +99,14 @@ export function calculateBacktestMetrics(initialEquity: number, trades: Backtest
   const lastTime = trades.at(-1)?.exitTime;
   const days = firstTime && lastTime ? Math.max(1, (lastTime - firstTime) / 86_400_000) : 1;
   const totalPnlUsdt = equity - initialEquity;
-  const totalPnlPct = (totalPnlUsdt / Math.max(initialEquity, Number.EPSILON)) * 100;
+  const totalPnlPct = ((equity - initialEquity) / initialEquity) * 100;
   const annualizedReturn = ((equity / Math.max(initialEquity, Number.EPSILON)) ** (365 / days) - 1) * 100;
   const avgHoldTimeMinutes = mean(trades.map((trade) => trade.holdTimeMinutes ?? Math.max(0, (trade.exitTime - trade.entryTime) / 60_000)));
 
   return {
     totalTrades: trades.length,
     winRate: trades.length ? (wins.length / trades.length) * 100 : 0,
-    profitFactor: totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? Number.POSITIVE_INFINITY : 0,
+    profitFactor: totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 10 : 0,
     sharpeRatio: stdDev > 0 ? (meanReturn / stdDev) * Math.sqrt(365) : 0,
     sortinoRatio: downsideDev > 0 ? (meanReturn / downsideDev) * Math.sqrt(365) : 0,
     calmarRatio: maxDrawdown > 0 ? annualizedReturn / maxDrawdown : 0,
