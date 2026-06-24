@@ -2,20 +2,15 @@
 
 ## Railway
 
-Create one PostgreSQL database and three services from the same repository:
+The default deployment uses one Railway service plus PostgreSQL. The production
+launcher starts the API and trading engine together. Express serves the compiled
+dashboard on the same public port.
 
-| Service | Railway config path | Start command |
-| --- | --- | --- |
-| engine | `/railway.engine.toml` | `corepack pnpm --filter @obsidra/engine start` |
-| api | `/railway.api.toml` | `corepack pnpm --filter @obsidra/api start` |
-| dashboard | `/railway.dashboard.toml` | `corepack pnpm --filter @obsidra/dashboard start -- --port $PORT` |
+Use `/railway.toml` as the Config-as-Code path, or leave the default root config
+discovery enabled. The start command is `corepack pnpm start`.
 
-For each Railway service, open **Settings → Config as Code → Config File Path**
-and select its file from the table above. A single root `railway.toml` cannot
-provide three different start commands to three services sharing one monorepo.
-
-Do not use the dashboard `dev` command in Railway. It starts Vite's development
-server rather than the built production artifact.
+Do not use the dashboard `dev` command in Railway. The API serves the built
+dashboard from `packages/dashboard/dist`.
 
 Share `DATABASE_URL` across engine and API. Put `VITE_API_URL` in the dashboard
 build environment and `API_ORIGIN` in the API service.

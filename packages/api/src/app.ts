@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { compare } from "bcryptjs";
 import { getEnv } from "@obsidra/shared";
@@ -34,6 +36,15 @@ export function createApp() {
     response.json({ ok: true });
   });
   app.use("/trpc", createExpressMiddleware({ router: appRouter, createContext }));
+
+  const dashboardDist = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../dashboard/dist",
+  );
+  app.use(express.static(dashboardDist));
+  app.get("/{*path}", (_request, response) => {
+    response.sendFile(path.join(dashboardDist, "index.html"));
+  });
   return app;
 }
 
