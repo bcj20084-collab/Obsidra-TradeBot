@@ -2,12 +2,14 @@ import { z } from 'zod';
 
 const boolFromString = z.union([z.boolean(), z.string()]).transform((value) => value === true || value === 'true');
 
+const defaultDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/obsidra';
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   BOT_VERSION: z.string().default('0.1.0'),
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: z.string().min(1).default(defaultDatabaseUrl),
   BYBIT_API_KEY: z.string().optional().default(''),
   BYBIT_API_SECRET: z.string().optional().default(''),
   BYBIT_TESTNET: boolFromString.default(true),
@@ -30,6 +32,10 @@ export const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 export const env = envSchema.parse(process.env);
+
+if (env.NODE_ENV === 'production' && env.DATABASE_URL === defaultDatabaseUrl) {
+  throw new Error('DATABASE_URL must be set in production.');
+}
 
 if (!env.PAPER_TRADING && (!env.BYBIT_API_KEY || !env.BYBIT_API_SECRET)) {
   throw new Error('Live trading requires BYBIT_API_KEY and BYBIT_API_SECRET. Keep PAPER_TRADING=true until ready.');
