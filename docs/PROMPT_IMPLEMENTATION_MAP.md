@@ -11,15 +11,17 @@ Implemented now:
 - MarketDataStore with candle buffers
 - EMA, RSI, MACD, Bollinger Bands, ADX, ATR
 - Signal pipeline with trend, entry, ML adjustment and final checks
-- AdaptiveParams and CircuitBreaker
+- AdaptiveParams and CircuitBreaker with tests
 - RiskEngine gatekeeper with daily loss, drawdown, sizing and pre-flight checks
-- ExposureGuard module with tests
+- ExposureGuard, DailyLossGuard, PositionSizer and PreFlightCheck tests
 - OrderStateMachine and ExecutionJournal interfaces
+- OrderStateMachine transition tests
 - PaperSimulator and TradeLifecycleService foundation
+- HealthCheck heartbeat freshness with tests
 - TradeRepository and LogRepository around Prisma
 - Initial PostgreSQL migration and Prisma indexes
 - MLTrainer with persistent weights in PostgreSQL
-- MetricsCollector
+- MetricsCollector with default snapshot test
 - Telegram commands and Discord embed notifiers
 - NotifierHub for parallel Telegram and Discord sends
 - Dashboard auth API pattern with httpOnly JWT cookie
@@ -37,5 +39,5 @@ Still needs hardening before live:
 - end-to-end tests against Bybit testnet
 - real closed-trade PnL reconciliation from exchange fills
 - Redis cache, if desired
-- action SHA pinning in CI and deploy workflows
+- action pinning in CI and deploy workflows
 - at least 30 days paper trading and checklist pass before live mode
