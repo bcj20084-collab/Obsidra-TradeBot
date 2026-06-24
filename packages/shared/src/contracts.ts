@@ -39,6 +39,7 @@ export interface SignalResult {
   takeProfit: number;
   confidence: number;
   indicators: Record<string, number>;
+  mlFeatures?: Record<string, number>;
   mlAdjustment: number;
   regime: MarketRegime;
   trendScore?: number;
