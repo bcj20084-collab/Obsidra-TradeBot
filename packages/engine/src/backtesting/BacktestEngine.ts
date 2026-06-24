@@ -93,12 +93,9 @@ export class BacktestEngine {
     const fast = mean(close.slice(-21));
     const slow = mean(close.slice(-55));
     const latest = candles.at(-1)!;
-    const adxProxy = Math.abs(fast - slow) / Math.max(latest.close, Number.EPSILON);
-    if (adxProxy < 0.0025) return null;
-    const rsiValue = rsi(close.slice(-15));
-    if (fast > slow && rsiValue < 65) return "LONG";
-    if (fast < slow && rsiValue > 35) return "SHORT";
-    return null;
+    const trendStrength = Math.abs(fast - slow) / Math.max(latest.close, Number.EPSILON);
+    if (trendStrength < 0.0025) return null;
+    return fast > slow ? "LONG" : "SHORT";
   }
 }
 
@@ -109,19 +106,6 @@ function averageTrueRange(candles: Candle[]): number {
     return Math.max(candle.high - candle.low, Math.abs(candle.high - previous.close), Math.abs(candle.low - previous.close));
   });
   return mean(ranges);
-}
-
-function rsi(values: number[]): number {
-  let gains = 0;
-  let losses = 0;
-  for (let index = 1; index < values.length; index++) {
-    const delta = values[index]! - values[index - 1]!;
-    if (delta >= 0) gains += delta;
-    else losses += Math.abs(delta);
-  }
-  if (losses === 0) return 100;
-  const rs = gains / losses;
-  return 100 - 100 / (1 + rs);
 }
 
 function mean(values: number[]): number {
