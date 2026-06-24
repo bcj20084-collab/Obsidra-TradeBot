@@ -8,4 +8,9 @@ describe('api app', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
+
+  it('rejects protected trpc routes without cookie', async () => {
+    const res = await request(createApp()).get('/trpc/control.status');
+    expect(res.status).toBe(401);
+  });
 });
