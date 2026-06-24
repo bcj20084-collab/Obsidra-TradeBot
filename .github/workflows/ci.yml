@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@1e60f620b9541dca151540d0c6d2b1f3b44e2a
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+        env:
+          DATABASE_URL: postgresql://unused
+          DASHBOARD_PASSWORD: test-password
+          JWT_SECRET: 12345678901234567890123456789012
+      - run: pnpm typecheck
+        env:
+          DATABASE_URL: postgresql://unused
+          DASHBOARD_PASSWORD: test-password
+          JWT_SECRET: 12345678901234567890123456789012
+      - run: pnpm test
+        env:
+          DATABASE_URL: postgresql://unused
+          DASHBOARD_PASSWORD: test-password
+          JWT_SECRET: 12345678901234567890123456789012
+      - run: pnpm build
+        env:
+          DATABASE_URL: postgresql://unused
+          DASHBOARD_PASSWORD: test-password
+          JWT_SECRET: 12345678901234567890123456789012

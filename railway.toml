@@ -1,0 +1,12 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm build"
+
+[deploy]
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
+
+# Create three Railway services from this repository and set each start command:
+# engine:    pnpm --filter @obsidra/engine start
+# api:       pnpm --filter @obsidra/api start
+# dashboard: pnpm --filter @obsidra/dashboard exec vite preview --host 0.0.0.0 --port $PORT

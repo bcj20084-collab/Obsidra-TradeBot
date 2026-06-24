@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Trade {
+  id               String    @id @default(cuid())
+  clientOrderId    String    @unique
+  bybitOrderId     String?   @unique
+  symbol           String
+  direction        String
+  status           String
+  entryPrice       Float?
+  exitPrice        Float?
+  stopLoss         Float
+  takeProfit       Float
+  positionSizeUsdt Float
+  leverage         Int
+  pnlUsdt          Float?
+  pnlPct           Float?
+  feeUsdt          Float?
+  slippage         Float?
+  holdTimeSeconds  Int?
+  signalScore      Int
+  signalData       Json
+  mlScore          Float?
+  marketRegime     String?
+  openedAt         DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  transitions      OrderTransition[]
+  journalEntries   JournalEntry[]
+
+  @@index([status, symbol])
+  @@index([closedAt])
+}
+
+model OrderTransition {
+  id        String   @id @default(cuid())
+  tradeId   String
+  fromState String?
+  toState   String
+  reason    String
+  data      Json?
+  createdAt DateTime @default(now())
+  trade     Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId, createdAt])
+}
+
+model JournalEntry {
+  id        String   @id @default(cuid())
+  tradeId   String?
+  type      String
+  data      Json
+  createdAt DateTime @default(now())
+  trade     Trade?   @relation(fields: [tradeId], references: [id], onDelete: SetNull)
+
+  @@index([type, createdAt])
+}
+
+model DailyMetrics {
+  id         String   @id @default(cuid())
+  date       String   @unique
+  pnlUsdt    Float    @default(0)
+  tradeCount Int      @default(0)
+  winCount   Int      @default(0)
+  feesUsdt   Float    @default(0)
+  equityEnd  Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model MlWeights {
+  id         String   @id @default(cuid())
+  weights    Json
+  trainedAt  DateTime @default(now())
+  tradeCount Int
+}
+
+model AdaptiveLog {
+  id        String   @id @default(cuid())
+  regime    String
+  config    Json
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model BotEvent {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  data      Json?
+  createdAt DateTime @default(now())
+}
+
+model BotState {
+  id        String   @id @default("singleton")
+  status    String   @default("STOPPED")
+  reason    String?
+  updatedAt DateTime @updatedAt
+}
