@@ -13,6 +13,9 @@ Nixpacks performs the frozen-lockfile install in its install phase. The build
 command intentionally runs only `corepack pnpm build` to avoid installing the
 workspace twice and slowing down Docker image export.
 
+Railway runs `corepack pnpm db:migrate` as a pre-deploy command. This applies
+committed Prisma migrations before the API and engine are started.
+
 Do not use the dashboard `dev` command in Railway. The API serves the built
 dashboard from `packages/dashboard/dist`.
 

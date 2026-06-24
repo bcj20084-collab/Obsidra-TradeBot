@@ -3,6 +3,7 @@ builder = "NIXPACKS"
 buildCommand = "corepack pnpm build"
 
 [deploy]
+preDeployCommand = "corepack pnpm db:migrate"
 startCommand = "corepack pnpm start"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
