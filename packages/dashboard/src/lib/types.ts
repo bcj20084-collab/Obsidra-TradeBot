@@ -31,3 +31,12 @@ export interface Trade {
   holdTimeSeconds: number | null;
   status: string;
 }
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  actor: string;
+  details: unknown;
+  ipAddress: string | null;
+  createdAt: string;
+}
