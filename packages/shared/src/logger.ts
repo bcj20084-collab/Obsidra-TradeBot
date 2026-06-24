@@ -5,6 +5,7 @@ import { getEnv } from "./env.js";
 const env = getEnv();
 
 const sensitiveKeys = new Set(["apikey", "secret", "password", "token", "jwt", "authorization"]);
+const pinoLogMethods = new Set(["fatal", "error", "warn", "info", "debug", "trace"]);
 
 function redact(value: unknown, key = ""): unknown {
   if (sensitiveKeys.has(key.toLowerCase())) return "[REDACTED]";
@@ -31,14 +32,19 @@ export const auditLogger = winston.createLogger({
 export function moduleLogger(module: string) {
   const child = logger.child({ module });
   return new Proxy(child, {
-    get(target, property, receiver) {
-      if (["fatal", "error", "warn", "info", "debug", "trace"].includes(String(property))) {
-        return (context: unknown, message?: string) => {
-          if (typeof context === "string") return Reflect.get(target, property, receiver)(context);
-          return Reflect.get(target, property, receiver)(redact(context), message);
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+
+      if (pinoLogMethods.has(String(property)) && typeof value === "function") {
+        return (...args: unknown[]) => {
+          if (args.length === 0 || typeof args[0] === "string") return value.call(target, ...args);
+          const [context, ...rest] = args;
+          return value.call(target, redact(context), ...rest);
         };
       }
-      return Reflect.get(target, property, receiver);
+
+      if (typeof value === "function") return value.bind(target);
+      return value;
     },
   });
 }
