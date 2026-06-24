@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "dev": "vite",
+    "start": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run --passWithNoTests",
     "lint": "tsc -b --pretty false"

@@ -8,7 +8,10 @@ Create one PostgreSQL database and three services from the same repository:
 | --- | --- | --- |
 | engine | `pnpm --filter @obsidra/engine start` | `:$PORT+1/health` |
 | api | `pnpm --filter @obsidra/api start` | `/health` |
-| dashboard | `pnpm --filter @obsidra/dashboard exec vite preview --host 0.0.0.0 --port $PORT` | `/` |
+| dashboard | `pnpm --filter @obsidra/dashboard start -- --port $PORT` | `/` |
+
+Do not use the dashboard `dev` command in Railway. It starts Vite's development
+server rather than the built production artifact.
 
 Share `DATABASE_URL` across engine and API. Put `VITE_API_URL` in the dashboard
 build environment and `API_ORIGIN` in the API service.

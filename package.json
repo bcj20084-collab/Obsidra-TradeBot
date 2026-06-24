@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.12.4",
   "engines": {
-    "node": ">=20 <25"
+    "node": "20.x"
   },
   "scripts": {
-    "build": "corepack pnpm -r build",
+    "build": "corepack pnpm db:generate && corepack pnpm -r build",
     "dev": "corepack pnpm --parallel --filter @obsidra/engine --filter @obsidra/api --filter @obsidra/dashboard dev",
     "typecheck": "corepack pnpm -r typecheck",
     "test": "corepack pnpm --filter @obsidra/shared build && corepack pnpm -r test",
