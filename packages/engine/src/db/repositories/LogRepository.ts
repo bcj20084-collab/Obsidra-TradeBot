@@ -1,11 +1,11 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../client.js';
 
 export class LogRepository {
   constructor(private readonly db: PrismaClient = defaultPrisma) {}
 
-  create(type: string, message: string, data?: Record<string, unknown>) {
-    return this.db.botEvent.create({ data: { type, message, data } });
+  create(type: string, message: string, data?: Prisma.InputJsonValue) {
+    return this.db.botEvent.create({ data: { type, message, data: data ?? Prisma.JsonNull } });
   }
 
   latest(limit = 100) {
