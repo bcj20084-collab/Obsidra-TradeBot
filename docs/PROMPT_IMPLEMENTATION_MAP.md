@@ -13,18 +13,21 @@ Implemented now:
 - Signal pipeline with trend, entry, ML adjustment and final checks
 - AdaptiveParams and CircuitBreaker
 - RiskEngine gatekeeper with daily loss, drawdown, sizing and pre-flight checks
+- ExposureGuard module with tests
 - OrderStateMachine and ExecutionJournal interfaces
 - PaperSimulator and TradeLifecycleService foundation
 - TradeRepository and LogRepository around Prisma
+- Initial PostgreSQL migration and Prisma indexes
 - MLTrainer with persistent weights in PostgreSQL
 - MetricsCollector
 - Telegram commands and Discord embed notifiers
 - NotifierHub for parallel Telegram and Discord sends
 - Dashboard auth API pattern with httpOnly JWT cookie
 - API control router for pause, resume, idle mode and config
-- React dashboard pages with metrics cards, equity curve, live ticker and adaptive params panel
+- React dashboard pages with metrics cards, equity curve, live ticker, CSV preview and adaptive params panel
 - Prisma schema
-- Railway and GitHub Actions files
+- Railway deployment guide and GitHub Actions CI
+- Operations runbook and incident response guide
 - Live-trading checklist
 
 Still needs hardening before live:
