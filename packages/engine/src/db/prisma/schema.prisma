@@ -32,6 +32,10 @@ model Trade {
   closedAt         DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  @@index([symbol, status])
+  @@index([closedAt])
+  @@index([createdAt])
 }
 
 model DailyMetrics {
@@ -66,4 +70,6 @@ model BotEvent {
   message   String
   data      Json?
   createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
 }
