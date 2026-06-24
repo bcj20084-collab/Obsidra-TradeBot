@@ -1,0 +1,8 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "corepack pnpm install --frozen-lockfile && corepack pnpm build"
+
+[deploy]
+startCommand = "corepack pnpm --filter @obsidra/engine start"
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10

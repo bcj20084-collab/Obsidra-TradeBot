@@ -4,11 +4,15 @@
 
 Create one PostgreSQL database and three services from the same repository:
 
-| Service | Start command | Health |
+| Service | Railway config path | Start command |
 | --- | --- | --- |
-| engine | `pnpm --filter @obsidra/engine start` | `:$PORT+1/health` |
-| api | `pnpm --filter @obsidra/api start` | `/health` |
-| dashboard | `pnpm --filter @obsidra/dashboard start -- --port $PORT` | `/` |
+| engine | `/railway.engine.toml` | `corepack pnpm --filter @obsidra/engine start` |
+| api | `/railway.api.toml` | `corepack pnpm --filter @obsidra/api start` |
+| dashboard | `/railway.dashboard.toml` | `corepack pnpm --filter @obsidra/dashboard start -- --port $PORT` |
+
+For each Railway service, open **Settings → Config as Code → Config File Path**
+and select its file from the table above. A single root `railway.toml` cannot
+provide three different start commands to three services sharing one monorepo.
 
 Do not use the dashboard `dev` command in Railway. It starts Vite's development
 server rather than the built production artifact.
