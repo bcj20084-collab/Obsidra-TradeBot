@@ -114,7 +114,7 @@ function calculateMetrics(initialEquity: number, trades: BacktestTradeRow[], dat
   return {
     totalTrades: trades.length,
     winRate: trades.length ? (wins.length / trades.length) * 100 : 0,
-    profitFactor: totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? Number.POSITIVE_INFINITY : 0,
+    profitFactor: totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 10 : 0,
     maxDrawdown,
     totalPnlUsdt,
     totalPnlPct: (totalPnlUsdt / initialEquity) * 100,
