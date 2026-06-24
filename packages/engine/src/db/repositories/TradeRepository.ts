@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../client.js';
 import type { Direction } from '../../signals/types.js';
 import type { OrderState } from '../../execution/OrderStateMachine.js';
@@ -13,7 +13,7 @@ export interface CreateTradeRecordInput {
   positionSizeUsdt: number;
   leverage: number;
   signalScore: number;
-  signalData: Record<string, unknown>;
+  signalData: Prisma.InputJsonValue;
   mlScore?: number;
   marketRegime?: string;
 }
@@ -25,8 +25,8 @@ export class TradeRepository {
     return this.db.trade.create({ data: input });
   }
 
-  updateStatus(id: string, status: OrderState, data: Record<string, unknown> = {}) {
-    return this.db.trade.update({ where: { id }, data: { status, ...data } });
+  updateStatus(id: string, status: OrderState, data: Prisma.TradeUpdateInput = {}) {
+    return this.db.trade.update({ where: { id }, data: { ...data, status } });
   }
 
   openForSymbol(symbol: string) {
