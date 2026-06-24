@@ -63,12 +63,26 @@ dashboard: pnpm --filter @obsidra/dashboard build && npx serve packages/dashboar
 Before engine starts in production, run:
 
 ```bash
-pnpm --filter @obsidra/engine migrate
+pnpm db:generate
+pnpm db:migrate
 ```
 
 This applies the committed Prisma migration files to PostgreSQL.
 
-## 5. Safety defaults
+## 5. CI and deploy gates
+
+The deploy workflow uses Node 24 and runs these checks before Railway deploy:
+
+```bash
+pnpm db:generate
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Do not deploy if any check fails.
+
+## 6. Safety defaults
 
 Keep these values until all checklist requirements pass:
 
