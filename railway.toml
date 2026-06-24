@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "corepack pnpm install --frozen-lockfile && corepack pnpm build"
+buildCommand = "corepack pnpm build"
 
 [deploy]
 startCommand = "corepack pnpm start"

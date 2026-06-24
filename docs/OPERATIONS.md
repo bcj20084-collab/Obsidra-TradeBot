@@ -9,6 +9,10 @@ dashboard on the same public port.
 Use `/railway.toml` as the Config-as-Code path, or leave the default root config
 discovery enabled. The start command is `corepack pnpm start`.
 
+Nixpacks performs the frozen-lockfile install in its install phase. The build
+command intentionally runs only `corepack pnpm build` to avoid installing the
+workspace twice and slowing down Docker image export.
+
 Do not use the dashboard `dev` command in Railway. The API serves the built
 dashboard from `packages/dashboard/dist`.
 
