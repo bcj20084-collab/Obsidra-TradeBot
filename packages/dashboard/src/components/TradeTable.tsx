@@ -1,0 +1,1 @@
+export function TradeTable() { return <table><thead><tr><th>Date</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>PnL</th><th>Score</th></tr></thead><tbody><tr><td colSpan={6}>No trades yet. Paper trading starts empty.</td></tr></tbody></table>; }

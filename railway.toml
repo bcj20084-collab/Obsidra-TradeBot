@@ -1,0 +1,28 @@
+[build]
+builder = "nixpacks"
+
+[[services]]
+name = "engine"
+source = "packages/engine"
+startCommand = "node dist/main.js"
+
+[services.engine.deploy]
+restartPolicyType = "always"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "api"
+source = "packages/api"
+startCommand = "node dist/index.js"
+
+[services.api.deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+[[services]]
+name = "dashboard"
+source = "packages/dashboard"
+startCommand = "npx serve dist -l 8080"
+
+[services.dashboard.networking]
+port = 8080
