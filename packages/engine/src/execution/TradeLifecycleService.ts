@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
 import { env } from '../config/env.js';
 import { TradeRepository } from '../db/repositories/TradeRepository.js';
 import type { RiskDecision } from '../risk/RiskEngine.js';
@@ -23,7 +22,7 @@ export class TradeLifecycleService {
       positionSizeUsdt: risk.positionSizeUsdt,
       leverage: risk.leverage,
       signalScore: signal.score,
-      signalData: signal.indicators as Prisma.InputJsonObject,
+      signalData: signal.indicators,
       mlScore: Number(signal.indicators.mlScore ?? 0),
       marketRegime: String(signal.indicators.regime ?? 'NORMAL'),
     });
