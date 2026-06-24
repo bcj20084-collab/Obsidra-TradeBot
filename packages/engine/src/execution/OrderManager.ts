@@ -16,6 +16,14 @@ export class OrderManager {
   async execute(symbol: string, signal: SignalResult, risk: RiskDecision): Promise<string> {
     if (!risk.approved) throw new Error("OrderManager requires RiskEngine approval");
     const clientOrderId = `obs-${randomUUID()}`.slice(0, 36);
+    const signalData = {
+      indicators: signal.indicators,
+      mlFeatures: signal.mlFeatures ?? {},
+      trendScore: signal.trendScore ?? 0,
+      entryScore: signal.entryScore ?? 0,
+      confidence: signal.confidence,
+      timestamp: signal.timestamp ?? Date.now(),
+    };
     const trade = await prisma.trade.create({
       data: {
         clientOrderId,
@@ -27,7 +35,7 @@ export class OrderManager {
         positionSizeUsdt: risk.positionSizeUsdt,
         leverage: risk.leverage,
         signalScore: signal.score,
-        signalData: signal.indicators,
+        signalData,
         mlScore: signal.mlAdjustment,
         marketRegime: signal.regime,
       },
