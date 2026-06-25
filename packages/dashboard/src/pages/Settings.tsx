@@ -44,7 +44,7 @@ export function Settings({ metrics, refresh }: { metrics: Metrics; refresh: () =
           {!audit.length && <p className="text-slate-500">No audit entries yet.</p>}
         </div>
       </div>
-      <div className="card"><div className="label">System</div><div className="mt-4 text-sm text-slate-400">Obsidra v0.1.0 · Railway-ready · status {metrics.botStatus}</div></div>
+      <div className="card"><div className="label">System</div><div className="mt-4 text-sm text-slate-400">Obsidra v1.0.0 · Node 24 · Railway-ready · status {metrics.botStatus}</div></div>
     </div>
   );
 }

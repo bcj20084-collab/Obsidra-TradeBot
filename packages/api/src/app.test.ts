@@ -10,7 +10,8 @@ describe("API", async () => {
   const app = createApp();
 
   it("exposes health", async () => {
-    await request(app).get("/health").expect(200, { ok: true });
+    const response = await request(app).get("/health").expect(200);
+    expect(response.body).toMatchObject({ ok: true, service: "obsidra-api" });
   });
 
   it("rejects bad login", async () => {

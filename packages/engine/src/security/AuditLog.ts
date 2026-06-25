@@ -1,5 +1,4 @@
-import { prisma } from "@obsidra/shared";
-import type { Prisma } from "@prisma/client";
+import { prisma, type Prisma } from "@obsidra/shared";
 
 export class AuditLog {
   record(action: string, actor: string, details: Record<string, unknown>, ipAddress?: string) {

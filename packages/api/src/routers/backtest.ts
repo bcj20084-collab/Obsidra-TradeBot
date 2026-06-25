@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { prisma } from "@obsidra/shared";
+import { Prisma, prisma } from "@obsidra/shared";
 import { protectedProcedure, router } from "../trpc.js";
 
 const configSchema = z.object({
@@ -77,7 +77,7 @@ export const backtestRouter = router({
         config: input,
         metrics,
         equityCurve: metrics.equityCurve,
-        trades: trades as any,
+        trades: trades as unknown as Prisma.InputJsonValue,
       },
     });
   }),

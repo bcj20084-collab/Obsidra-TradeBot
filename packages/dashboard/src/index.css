@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-obsidian: #07090e;
+  --color-panel: #10141d;
+  --color-border: #222938;
+  --color-cyan: #50e3c2;
+  --shadow-glow: 0 0 40px rgba(80, 227, 194, 0.04);
+}
 
 :root {
   color-scheme: dark;
@@ -20,6 +26,9 @@ body {
 }
 
 * { box-sizing: border-box; }
+
+button, a, input { -webkit-tap-highlight-color: transparent; }
+::selection { background: rgba(80, 227, 194, 0.25); }
 
 @layer components {
   .card { @apply rounded-2xl border border-border bg-panel/90 p-5 shadow-glow backdrop-blur; }

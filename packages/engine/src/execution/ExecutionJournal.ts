@@ -1,5 +1,4 @@
-import { prisma } from "@obsidra/shared";
-import type { Prisma } from "@prisma/client";
+import { prisma, type Prisma } from "@obsidra/shared";
 
 export class ExecutionJournal {
   async record(type: string, data: Record<string, unknown>, tradeId?: string): Promise<void> {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, CandlestickChart, FlaskConical, Gauge, Layers3, Settings as SettingsIcon, Workflow } from "lucide-react";
+import { Activity, CandlestickChart, FlaskConical, Gauge, Layers3, RefreshCw, Settings as SettingsIcon, Workflow } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { hasSession, login, trpc } from "./lib/api";
 import type { Metrics, Trade } from "./lib/types";
@@ -21,13 +21,23 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
   const refresh = useCallback(async () => {
-    const [nextMetrics, nextTrades] = await Promise.all([
-      trpc.query("metrics.live") as Promise<Metrics>,
-      trpc.query("trades.list", { limit: 100, offset: 0 }) as Promise<Trade[]>,
-    ]);
-    setMetrics(nextMetrics);
-    setTrades(nextTrades);
+    setRefreshing(true);
+    try {
+      const [nextMetrics, nextTrades] = await Promise.all([
+        trpc.query("metrics.live") as Promise<Metrics>,
+        trpc.query("trades.list", { limit: 100, offset: 0 }) as Promise<Trade[]>,
+      ]);
+      setMetrics(nextMetrics);
+      setTrades(nextTrades);
+      setConnectionError("");
+    } catch {
+      setConnectionError("Conexiunea cu API-ul este întreruptă. Datele afișate pot fi vechi.");
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
   useEffect(() => { void hasSession().then(setAuthenticated); }, []);
   useEffect(() => {
@@ -60,6 +70,15 @@ export default function App() {
         <div className="mt-6 hidden rounded-xl border border-border p-4 text-xs text-slate-500 lg:block"><span className={metrics.botStatus === "RUNNING" ? "text-emerald-400" : "text-amber-400"}>●</span> {metrics.botStatus}<br /><span className="mt-2 block">Paper-first execution</span></div>
       </aside>
       <main className="p-4 sm:p-6 lg:p-8">
+        <div className="mb-5 flex min-h-10 items-center justify-between gap-4">
+          <div aria-live="polite" className={`text-sm ${connectionError ? "text-rose-400" : "text-emerald-400"}`}>
+            {connectionError || "● Sistem conectat"}
+          </div>
+          <button className="button flex items-center gap-2" disabled={refreshing} onClick={() => void refresh()}>
+            <RefreshCw className={refreshing ? "animate-spin" : ""} size={15} />
+            Actualizează
+          </button>
+        </div>
         <Routes>
           <Route path="/" element={<Overview metrics={metrics} trades={trades} />} />
           <Route path="/trades" element={<Trades trades={trades} />} />

@@ -1,5 +1,4 @@
-import { prisma, AppError, ErrorCode } from "@obsidra/shared";
-import type { Prisma } from "@prisma/client";
+import { prisma, AppError, ErrorCode, type Prisma } from "@obsidra/shared";
 import type { ExecutionJournal } from "./ExecutionJournal.js";
 
 export type OrderState =

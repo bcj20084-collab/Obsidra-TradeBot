@@ -16,13 +16,37 @@ export function createApp() {
   const env = getEnv();
   const app = express();
   app.disable("x-powered-by");
+  app.use((_request, response, next) => {
+    response.set({
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    });
+    next();
+  });
   app.use(cors({ origin: env.API_ORIGIN, credentials: true }));
   app.use(express.json({ limit: "64kb" }));
   app.use(cookieParser());
   app.set("trust proxy", 1);
   app.use(ipWhitelist);
 
-  app.get("/health", (_request, response) => response.json({ ok: true }));
+  app.get("/health", (_request, response) => response.json({
+    ok: true,
+    service: "obsidra-api",
+    uptimeSeconds: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+  }));
+  app.get("/ready", async (_request, response) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      response.json({ ready: true });
+    } catch {
+      response.status(503).json({ ready: false });
+    }
+  });
   app.get("/auth/session", (request, response) => response.json({ authenticated: Boolean(readSession(request)) }));
   app.post("/auth/login", loginRateLimiter, async (request, response) => {
     const requestIp = request.ip ?? "unknown";

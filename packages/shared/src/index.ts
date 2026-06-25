@@ -4,3 +4,4 @@ export * from "./env.js";
 export * from "./errors.js";
 export * from "./logger.js";
 export * from "./strategyCatalog.js";
+export type { Prisma } from "@prisma/client";

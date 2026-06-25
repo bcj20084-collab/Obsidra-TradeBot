@@ -1,6 +1,6 @@
 {
   "name": "@obsidra/engine",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -14,17 +14,13 @@
   },
   "dependencies": {
     "@obsidra/shared": "workspace:*",
-    "@prisma/client": "^6.10.1",
-    "discord.js": "^14.21.0",
-    "node-telegram-bot-api": "^0.66.0",
-    "ws": "^8.18.3",
-    "zod": "^3.25.67"
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node-telegram-bot-api": "^0.64.9",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

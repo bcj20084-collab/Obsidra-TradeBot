@@ -9,11 +9,22 @@ const server = createServer(createApp());
 const wss = new WebSocketServer({ server, path: "/live" });
 
 wss.on("connection", (socket) => {
-  const timer = setInterval(async () => {
-    if (socket.readyState !== socket.OPEN) return;
-    const state = await prisma.botState.findUnique({ where: { id: "singleton" } });
-    const latest = await prisma.trade.findFirst({ orderBy: { updatedAt: "desc" } });
-    socket.send(JSON.stringify({ type: "snapshot", state, latestTrade: latest, timestamp: Date.now() }));
+  let sending = false;
+  const timer = setInterval(() => {
+    if (sending || socket.readyState !== socket.OPEN) return;
+    sending = true;
+    void Promise.all([
+      prisma.botState.findUnique({ where: { id: "singleton" } }),
+      prisma.trade.findFirst({ orderBy: { updatedAt: "desc" } }),
+    ]).then(([state, latestTrade]) => {
+      if (socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify({ type: "snapshot", state, latestTrade, timestamp: Date.now() }));
+      }
+    }).catch((error) => {
+      log.warn({ error }, "live snapshot failed");
+    }).finally(() => {
+      sending = false;
+    });
   }, 2_000);
   socket.on("close", () => clearInterval(timer));
 });

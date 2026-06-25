@@ -1,10 +1,10 @@
 {
   "name": "obsidra-tradebot",
   "private": true,
-  "version": "0.1.0",
-  "packageManager": "pnpm@10.12.4",
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.34.4",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "build": "corepack pnpm db:generate && corepack pnpm -r build",
@@ -15,12 +15,14 @@
     "lint": "corepack pnpm -r lint",
     "db:generate": "corepack pnpm --filter @obsidra/shared prisma:generate",
     "db:push": "corepack pnpm --filter @obsidra/shared prisma:push",
-    "db:migrate": "corepack pnpm --filter @obsidra/shared prisma:migrate"
+    "db:migrate": "corepack pnpm --filter @obsidra/shared prisma:migrate",
+    "check": "corepack pnpm typecheck && corepack pnpm lint && corepack pnpm test && corepack pnpm build",
+    "audit:prod": "corepack pnpm audit --prod --audit-level high"
   },
   "devDependencies": {
     "@obsidra/shared": "workspace:*",
-    "@types/node": "^22.15.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "@types/node": "^24.13.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

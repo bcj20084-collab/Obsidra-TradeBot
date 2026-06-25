@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const boolString = z
   .enum(["true", "false"])
-  .default("false")
   .transform((value) => value === "true");
 
 const optionalUrl = z.union([z.literal(""), z.string().url()]).default("");
@@ -17,13 +16,13 @@ export const envSchema = z
     BYBIT_API_SECRET: z.string().default(""),
     BYBIT_API_KEY_NEW: z.string().default(""),
     BYBIT_API_SECRET_NEW: z.string().default(""),
-    BYBIT_TESTNET: boolString.default("true"),
+    BYBIT_TESTNET: boolString.default(true),
     BYBIT_MAX_EXPOSURE_USDT: z.coerce.number().positive().default(1000),
     BINANCE_API_KEY: z.string().default(""),
     BINANCE_API_SECRET: z.string().default(""),
-    BINANCE_TESTNET: boolString.default("true"),
+    BINANCE_TESTNET: boolString.default(true),
     BINANCE_MAX_EXPOSURE_USDT: z.coerce.number().positive().default(500),
-    PAPER_TRADING: boolString.default("true"),
+    PAPER_TRADING: boolString.default(true),
     TRADING_SYMBOL: z.string().regex(/^[A-Z0-9]+$/).default("BTCUSDT"),
     TRADING_SYMBOLS: z.string().default("BTCUSDT"),
     TRADING_LEVERAGE_MAX: z.coerce.number().int().min(1).max(10).default(5),
@@ -33,7 +32,7 @@ export const envSchema = z
     MAX_OPEN_POSITIONS: z.coerce.number().int().min(1).max(5).default(2),
     MAX_OPEN_POSITIONS_TOTAL: z.coerce.number().int().min(1).max(20).default(5),
     TOTAL_DAILY_LOSS_LIMIT_USDT: z.coerce.number().positive().default(100),
-    ALLOW_SAME_SYMBOL_HEDGE: boolString.default("false"),
+    ALLOW_SAME_SYMBOL_HEDGE: boolString.default(false),
     MIN_POSITION_USDT: z.coerce.number().positive().default(10),
     DAILY_LOSS_LIMIT_USDT: z.coerce.number().positive().default(50),
     WEEKLY_LOSS_LIMIT_USDT: z.coerce.number().positive().default(150),
@@ -50,37 +49,37 @@ export const envSchema = z
     JWT_SECRET: z.string().min(32),
     MASTER_SECRET: z.string().min(32).default("development-only-master-secret-32"),
     ALLOWED_IPS: z.string().default(""),
-    STRATEGY_TREND_ENABLED: boolString.default("true"),
-    STRATEGY_GRID_ENABLED: boolString.default("false"),
-    STRATEGY_DCA_ENABLED: boolString.default("false"),
-    STRATEGY_SCALP_ENABLED: boolString.default("false"),
-    STRATEGY_COPY_ENABLED: boolString.default("false"),
+    STRATEGY_TREND_ENABLED: boolString.default(true),
+    STRATEGY_GRID_ENABLED: boolString.default(false),
+    STRATEGY_DCA_ENABLED: boolString.default(false),
+    STRATEGY_SCALP_ENABLED: boolString.default(false),
+    STRATEGY_COPY_ENABLED: boolString.default(false),
     TREND_SYMBOLS: z.string().default("BTCUSDT,ETHUSDT"),
     TREND_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
-    TREND_PAPER_TRADING: boolString.default("true"),
+    TREND_PAPER_TRADING: boolString.default(true),
     GRID_SYMBOL: z.string().default("BTCUSDT"),
     GRID_EXCHANGE: z.enum(["bybit", "binance"]).default("binance"),
     GRID_UPPER_PRICE: z.coerce.number().positive().default(70_000),
     GRID_LOWER_PRICE: z.coerce.number().positive().default(60_000),
     GRID_COUNT: z.coerce.number().int().min(5).max(50).default(10),
     GRID_TOTAL_INVEST_USDT: z.coerce.number().positive().default(500),
-    GRID_PAPER_TRADING: boolString.default("true"),
+    GRID_PAPER_TRADING: boolString.default(true),
     DCA_SYMBOL: z.string().default("ETHUSDT"),
     DCA_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
     DCA_DIRECTION: z.enum(["LONG", "SHORT"]).default("LONG"),
     DCA_BASE_ORDER_USDT: z.coerce.number().positive().default(50),
     DCA_SAFETY_ORDER_USDT: z.coerce.number().positive().default(100),
     DCA_SAFETY_ORDER_COUNT: z.coerce.number().int().min(0).max(20).default(5),
-    DCA_PAPER_TRADING: boolString.default("true"),
+    DCA_PAPER_TRADING: boolString.default(true),
     SCALP_SYMBOL: z.string().default("BTCUSDT"),
     SCALP_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
-    SCALP_PAPER_TRADING: boolString.default("true"),
+    SCALP_PAPER_TRADING: boolString.default(true),
     COPY_TRADER_IDS: z.string().default(""),
     COPY_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
     COPY_RATIO_PCT: z.coerce.number().positive().max(100).default(10),
     COPY_MAX_SIZE_USDT: z.coerce.number().positive().default(200),
     COPY_POSITION_FEED_URL: optionalUrl,
-    COPY_PAPER_TRADING: boolString.default("true"),
+    COPY_PAPER_TRADING: boolString.default(true),
     VITE_API_URL: z.string().url().default("http://localhost:3000"),
     API_ORIGIN: z.string().url().default("http://localhost:5173"),
   })
@@ -88,20 +87,20 @@ export const envSchema = z
     const symbols = env.TRADING_SYMBOLS.split(",").map((symbol) => symbol.trim()).filter(Boolean);
     if (symbols.length === 0 || symbols.length > 5 || symbols.some((symbol) => !/^[A-Z0-9]+$/.test(symbol))) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "TRADING_SYMBOLS must contain 1-5 comma-separated Bybit symbols",
         path: ["TRADING_SYMBOLS"],
       });
     }
     if (!env.DASHBOARD_PASSWORD_HASH && env.DASHBOARD_PASSWORD.length < 8) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Set DASHBOARD_PASSWORD_HASH or DASHBOARD_PASSWORD",
         path: ["DASHBOARD_PASSWORD_HASH"],
       });
     }
     if (env.GRID_LOWER_PRICE >= env.GRID_UPPER_PRICE) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GRID_LOWER_PRICE must be below GRID_UPPER_PRICE", path: ["GRID_LOWER_PRICE"] });
+      ctx.addIssue({ code: "custom", message: "GRID_LOWER_PRICE must be below GRID_UPPER_PRICE", path: ["GRID_LOWER_PRICE"] });
     }
     const strategyModes = [
       [env.STRATEGY_TREND_ENABLED, env.TREND_EXCHANGE, env.TREND_PAPER_TRADING],
@@ -113,20 +112,20 @@ export const envSchema = z
     const liveBybit = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "bybit" && !(env.PAPER_TRADING || paper));
     const liveBinance = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "binance" && !(env.PAPER_TRADING || paper));
     if (liveBybit && (!(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY) || !(env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET))) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Live Bybit strategies require API credentials", path: ["BYBIT_API_KEY"] });
+      ctx.addIssue({ code: "custom", message: "Live Bybit strategies require API credentials", path: ["BYBIT_API_KEY"] });
     }
     if (liveBinance && (!env.BINANCE_API_KEY || !env.BINANCE_API_SECRET)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Live Binance strategies require API credentials", path: ["BINANCE_API_KEY"] });
+      ctx.addIssue({ code: "custom", message: "Live Binance strategies require API credentials", path: ["BINANCE_API_KEY"] });
     }
     for (const exchange of ["bybit", "binance"] as const) {
       const modes = new Set(strategyModes.filter(([enabled, candidate]) => enabled && candidate === exchange).map(([, , paper]) => env.PAPER_TRADING || paper));
       if (modes.size > 1) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Enabled ${exchange} strategies must use the same paper/live mode`, path: ["STRATEGY_TREND_ENABLED"] });
+        ctx.addIssue({ code: "custom", message: `Enabled ${exchange} strategies must use the same paper/live mode`, path: ["STRATEGY_TREND_ENABLED"] });
       }
     }
     if (liveBybit && env.BYBIT_TESTNET) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Set PAPER_TRADING=true for simulations; live execution on testnet must be explicit",
         path: ["PAPER_TRADING"],
       });
