@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, CandlestickChart, FlaskConical, Gauge, Layers3, Settings as SettingsIcon } from "lucide-react";
+import { Activity, CandlestickChart, FlaskConical, Gauge, Layers3, Settings as SettingsIcon, Workflow } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { hasSession, login, trpc } from "./lib/api";
 import type { Metrics, Trade } from "./lib/types";
@@ -9,6 +9,7 @@ import { Strategy } from "./pages/Strategy";
 import { Trades } from "./pages/Trades";
 import { Backtest } from "./pages/Backtest";
 import { Symbols } from "./pages/Symbols";
+import { Strategies } from "./pages/Strategies";
 
 const emptyMetrics: Metrics = {
   totalPnlUsdt: 0, totalPnlPct: 0, winRate: 0, profitFactor: 0, sharpeRatio: 0, maxDrawdown: 0,
@@ -46,6 +47,7 @@ export default function App() {
             ["/", "Overview", Gauge],
             ["/trades", "Trades", CandlestickChart],
             ["/strategy", "Strategy", Activity],
+            ["/strategies", "Strategies", Workflow],
             ["/backtest", "Backtest", FlaskConical],
             ["/symbols", "Symbols", Layers3],
             ["/settings", "Control", SettingsIcon],
@@ -62,6 +64,7 @@ export default function App() {
           <Route path="/" element={<Overview metrics={metrics} trades={trades} />} />
           <Route path="/trades" element={<Trades trades={trades} />} />
           <Route path="/strategy" element={<Strategy metrics={metrics} />} />
+          <Route path="/strategies" element={<Strategies />} />
           <Route path="/backtest" element={<Backtest />} />
           <Route path="/symbols" element={<Symbols />} />
           <Route path="/settings" element={<Settings metrics={metrics} refresh={() => void refresh()} />} />

@@ -19,6 +19,8 @@ export interface Trade {
   id: string;
   createdAt: string;
   symbol: string;
+  exchange: string;
+  strategyId: string;
   direction: string;
   entryPrice: number | null;
   exitPrice: number | null;

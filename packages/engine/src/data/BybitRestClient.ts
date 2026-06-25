@@ -144,7 +144,11 @@ export class BybitRestClient {
     const response = await fetch(`${this.baseUrl}${path}?${query}`);
     this.lastHeartbeat = Date.now();
     if (!response.ok) throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, `Bybit HTTP ${response.status}`);
-    return (await response.json()) as T;
+    const json = (await response.json()) as T & { retCode?: number; retMsg?: string };
+    if (typeof json.retCode === "number" && json.retCode !== 0) {
+      throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg ?? `Bybit error ${json.retCode}`, { retCode: json.retCode });
+    }
+    return json;
   }
 
   private async privateRequest<T = unknown>(

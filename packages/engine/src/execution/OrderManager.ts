@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma, type SignalResult } from "@obsidra/shared";
-import type { BybitRestClient } from "../data/BybitRestClient.js";
+import type { ExchangeId } from "../exchanges/IExchangeAdapter.js";
+import type { ExchangeRouter } from "../exchanges/ExchangeRouter.js";
 import type { RiskDecision } from "../risk/RiskEngine.js";
 import { sideFor } from "../risk/RiskEngine.js";
 import type { ExecutionJournal } from "./ExecutionJournal.js";
@@ -8,12 +9,12 @@ import type { OrderStateMachine } from "./OrderStateMachine.js";
 
 export class OrderManager {
   constructor(
-    private readonly client: BybitRestClient,
+    private readonly exchanges: ExchangeRouter,
     private readonly stateMachine: OrderStateMachine,
     private readonly journal: ExecutionJournal,
   ) {}
 
-  async execute(symbol: string, signal: SignalResult, risk: RiskDecision): Promise<string> {
+  async execute(symbol: string, signal: SignalResult, risk: RiskDecision, exchange: ExchangeId = "bybit", strategyId = "trend"): Promise<string> {
     if (!risk.approved) throw new Error("OrderManager requires RiskEngine approval");
     const clientOrderId = `obs-${randomUUID()}`.slice(0, 36);
     const signalData = {
@@ -28,6 +29,8 @@ export class OrderManager {
       data: {
         clientOrderId,
         symbol,
+        exchange,
+        strategyId,
         direction: signal.direction,
         status: "PENDING",
         stopLoss: risk.stopLossPrice,
@@ -41,22 +44,29 @@ export class OrderManager {
       },
     });
     await this.journal.record("ORDER_INTENT", { signal, risk, clientOrderId }, trade.id);
-    await this.stateMachine.transition(trade.id, "SUBMITTED", "Write-ahead transition before Bybit API");
+    await this.stateMachine.transition(trade.id, "SUBMITTED", `Write-ahead transition before ${exchange} API`);
     try {
-      const quantity = (risk.positionSizeUsdt / signal.entryPrice).toFixed(6);
-      const result = await this.client.placeOrder({
+      const quantity = Number((risk.positionSizeUsdt / signal.entryPrice).toFixed(6));
+      const result = await this.exchanges.placeOrder(exchange, {
         symbol,
         side: sideFor(signal.direction),
+        orderType: "Market",
         qty: quantity,
-        stopLoss: risk.stopLossPrice.toFixed(2),
-        takeProfit: risk.takeProfitPrice.toFixed(2),
+        stopLoss: risk.stopLossPrice,
+        takeProfit: risk.takeProfitPrice,
         clientOrderId,
       });
       await prisma.trade.update({
         where: { id: trade.id },
-        data: { bybitOrderId: result.orderId, entryPrice: signal.entryPrice, openedAt: new Date() },
+        data: {
+          exchangeOrderId: result.exchangeOrderId,
+          ...(exchange === "bybit" ? { bybitOrderId: result.exchangeOrderId } : {}),
+          entryPrice: result.avgFillPrice || signal.entryPrice,
+          feeUsdt: result.feeUsdt,
+          openedAt: new Date(),
+        },
       });
-      await this.stateMachine.transition(trade.id, "OPEN", result.paper ? "Paper order opened" : "Exchange confirmed");
+      await this.stateMachine.transition(trade.id, "OPEN", result.status === "Filled" ? "Order filled" : "Exchange confirmed");
       await this.journal.record("ORDER_PLACED", { ...result, quantity }, trade.id);
       return trade.id;
     } catch (error) {

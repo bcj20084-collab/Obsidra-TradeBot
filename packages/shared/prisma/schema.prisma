@@ -11,7 +11,10 @@ model Trade {
   id               String    @id @default(cuid())
   clientOrderId    String    @unique
   bybitOrderId     String?   @unique
+  exchangeOrderId  String?
   symbol           String
+  exchange         String    @default("bybit")
+  strategyId       String    @default("trend")
   direction        String
   status           String
   entryPrice       Float?
@@ -78,6 +81,72 @@ model DailyMetrics {
   updatedAt  DateTime @updatedAt
 
   @@unique([date, symbol])
+}
+
+model GridLevel {
+  id              String   @id @default(cuid())
+  strategyId      String
+  symbol          String
+  exchange        String
+  levelPrice      Float
+  orderSizeUsdt   Float
+  status          String
+  exchangeOrderId String?
+  profitUsdt      Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([strategyId, status])
+}
+
+model DCAPosition {
+  id                 String   @id @default(cuid())
+  strategyId         String
+  symbol             String
+  exchange           String
+  direction          String
+  status             String
+  averageEntryPrice  Float?
+  totalQty           Float    @default(0)
+  totalInvestedUsdt  Float    @default(0)
+  safetyOrdersFilled Int      @default(0)
+  targetPrice        Float?
+  stopLossPrice      Float?
+  cycleStartedAt     DateTime?
+  cycleClosedAt      DateTime?
+  cyclePnlUsdt       Float?
+  cooldownEndsAt     DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CopyTraderPosition {
+  id            String   @id @default(cuid())
+  traderId      String
+  symbol        String
+  direction     String
+  size          Float
+  entryPrice    Float
+  leverage      Int
+  detectedAt    DateTime
+  closedAt      DateTime?
+  ourTradeId    String?
+  skippedReason String?
+
+  @@index([traderId, symbol])
+}
+
+model StrategyMetrics {
+  id         String @id @default(cuid())
+  strategyId String
+  date       String
+  pnlUsdt    Float  @default(0)
+  tradeCount Int    @default(0)
+  winCount   Int    @default(0)
+  feesUsdt   Float  @default(0)
+  equityEnd  Float
+
+  @@unique([strategyId, date])
 }
 
 model HistoricalCandle {

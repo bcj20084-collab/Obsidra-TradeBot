@@ -1,12 +1,17 @@
 # Obsidra TradeBot
 
-Production-oriented Bybit USDT-M trading platform with a TypeScript engine, tRPC API,
+Production-oriented Bybit and Binance USDT-M trading platform with a TypeScript engine, tRPC API,
 React dashboard, PostgreSQL persistence, paper trading, strict risk controls, and
 Railway deployment configuration.
 
 Version 2 adds multiplexed multi-symbol market data, portfolio exposure limits,
 historical candle storage, saved backtests, validated per-symbol ML training,
 an immutable audit trail, IP allowlisting and hardened dashboard authentication.
+
+Version 3 adds exchange adapters and deterministic routing, isolated Trend/Grid/DCA/
+Scalp/Copy strategy envelopes, strategy conflict coordination, portfolio-wide risk
+limits, per-strategy persistence and a Strategies dashboard. New strategies remain
+disabled and in paper mode by default.
 
 > **Safety first:** `PAPER_TRADING` defaults to `true`. Do not enable live trading
 > until the strategy has passed at least 30 days / 200 trades of paper validation.
@@ -42,3 +47,6 @@ See [docs/OPERATIONS.md](docs/OPERATIONS.md) for deployment and live-trading gat
 Configure up to five symbols with `TRADING_SYMBOLS=BTCUSDT,ETHUSDT`. The engine
 warms its indicator buffers through Bybit REST before opening the WebSocket, so
 Railway restarts do not require days of candle accumulation.
+
+Railway runs API, dashboard assets and engine in one service through
+`scripts/start-production.mjs`; the database migration runs before every deployment.
