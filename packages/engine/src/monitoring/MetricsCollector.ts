@@ -31,7 +31,7 @@ export class MetricsCollector {
     const daily = await prisma.dailyMetrics.findMany({ orderBy: { date: "asc" }, take: 30 });
     const openTrades = await prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
     const symbolNames = [...new Set(trades.map((trade) => trade.symbol))];
-    this.cached = {
+    const snapshot: LiveMetrics = {
       totalPnlUsdt: pnl.reduce((sum, value) => sum + value, 0),
       totalPnlPct: ((equity - 10_000) / 10_000) * 100,
       winRate: trades.length ? (wins.length / trades.length) * 100 : 0,
@@ -70,25 +70,26 @@ export class MetricsCollector {
       openPositionsCount: openTrades.length,
       mlAccuracy: (await prisma.mlWeights.findFirst({ orderBy: { trainedAt: "desc" } }))?.cvAccuracy ?? null,
     };
+    this.cached = snapshot;
     premiumLog("metrics", "metrics_collected", {
       status,
       regime,
-      totalPnlUsdt: this.cached.totalPnlUsdt,
-      totalPnlPct: this.cached.totalPnlPct,
-      winRate: this.cached.winRate,
-      profitFactor: this.cached.profitFactor,
-      totalTrades: this.cached.totalTrades,
-      tradesLast24h: this.cached.tradesLast24h,
-      signalsGenerated24h: this.cached.signalsGenerated24h,
-      signalsRejected24h: this.cached.signalsRejected24h,
-      totalExposureUsdt: this.cached.totalExposureUsdt,
-      openPositionsCount: this.cached.openPositionsCount,
-      currentDrawdown: this.cached.currentDrawdown,
-      maxDrawdown: this.cached.maxDrawdown,
-      uptime: this.cached.uptime,
-      mlAccuracy: this.cached.mlAccuracy,
+      totalPnlUsdt: snapshot.totalPnlUsdt,
+      totalPnlPct: snapshot.totalPnlPct,
+      winRate: snapshot.winRate,
+      profitFactor: snapshot.profitFactor,
+      totalTrades: snapshot.totalTrades,
+      tradesLast24h: snapshot.tradesLast24h,
+      signalsGenerated24h: snapshot.signalsGenerated24h,
+      signalsRejected24h: snapshot.signalsRejected24h,
+      totalExposureUsdt: snapshot.totalExposureUsdt,
+      openPositionsCount: snapshot.openPositionsCount,
+      currentDrawdown: snapshot.currentDrawdown,
+      maxDrawdown: snapshot.maxDrawdown,
+      uptime: snapshot.uptime,
+      mlAccuracy: snapshot.mlAccuracy,
     }, "info", "premium metrics collected");
-    return this.cached!;
+    return snapshot;
   }
 
   get latest(): LiveMetrics | undefined {
