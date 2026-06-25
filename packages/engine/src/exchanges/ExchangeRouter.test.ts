@@ -5,6 +5,7 @@ import type { IExchangeAdapter, OrderParams } from "./IExchangeAdapter.js";
 function adapter(exchangeId: "bybit" | "binance"): IExchangeAdapter {
   return {
     exchangeId,
+    paperTrading: true,
     subscribeCandles: vi.fn(),
     subscribeTicker: vi.fn(),
     getBestBidAsk: vi.fn(),

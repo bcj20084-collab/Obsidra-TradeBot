@@ -38,6 +38,7 @@ export interface Position {
 
 export interface IExchangeAdapter {
   readonly exchangeId: ExchangeId;
+  readonly paperTrading: boolean;
   subscribeCandles(symbol: string, intervals: string[], onCandle: (candle: OHLCVCandle) => void): void;
   subscribeTicker(symbol: string, onTick: (price: number, fundingRate: number) => void): void;
   getBestBidAsk(symbol: string): Promise<{ bid: number; ask: number }>;

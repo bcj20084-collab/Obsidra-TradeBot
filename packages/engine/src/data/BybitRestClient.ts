@@ -9,8 +9,11 @@ export interface PlaceOrderRequest {
   symbol: string;
   side: "Buy" | "Sell";
   qty: string;
-  stopLoss: string;
-  takeProfit: string;
+  orderType?: "Market" | "Limit";
+  price?: string;
+  stopLoss?: string;
+  takeProfit?: string;
+  reduceOnly?: boolean;
   clientOrderId?: string;
 }
 
@@ -40,6 +43,10 @@ export class BybitRestClient {
     return this.lastHeartbeat;
   }
 
+  get isPaperTrading(): boolean {
+    return this.paperTrading;
+  }
+
   async getOpenPositions(symbol?: string): Promise<Array<Record<string, unknown>>> {
     if (this.paperTrading) return [];
     const result = await this.privateRequest<{ list: Array<Record<string, unknown>> }>(
@@ -66,10 +73,12 @@ export class BybitRestClient {
       category: "linear",
       symbol: request.symbol,
       side: request.side,
-      orderType: "Market",
+      orderType: request.orderType ?? "Market",
       qty: request.qty,
-      stopLoss: request.stopLoss,
-      takeProfit: request.takeProfit,
+      ...(request.price ? { price: request.price, timeInForce: "GTC" } : {}),
+      ...(request.stopLoss ? { stopLoss: request.stopLoss } : {}),
+      ...(request.takeProfit ? { takeProfit: request.takeProfit } : {}),
+      ...(request.reduceOnly ? { reduceOnly: true } : {}),
       orderLinkId: request.clientOrderId,
       positionIdx: 0,
     });
@@ -94,6 +103,23 @@ export class BybitRestClient {
       { category: "linear", ...(symbol ? { symbol } : {}), settleCoin: "USDT" },
     );
     return result.list;
+  }
+
+  async getOrderHistory(symbol: string, clientOrderId: string): Promise<{ avgPrice: number; filledQty: number; status: string; feeUsdt: number } | null> {
+    if (this.paperTrading) return null;
+    const result = await this.privateRequest<{ list: Array<Record<string, unknown>> }>(
+      "GET",
+      "/v5/order/history",
+      { category: "linear", symbol, orderLinkId: clientOrderId, limit: "1" },
+    );
+    const order = result.list[0];
+    if (!order) return null;
+    return {
+      avgPrice: Number(order.avgPrice ?? 0),
+      filledQty: Number(order.cumExecQty ?? 0),
+      status: String(order.orderStatus ?? ""),
+      feeUsdt: Number(order.cumExecFee ?? 0),
+    };
   }
 
   async setLeverage(symbol: string, leverage: number): Promise<void> {
@@ -187,14 +213,18 @@ export class BybitRestClient {
           result: T;
         };
         if (response.status === 429 || [500, 502, 503, 504].includes(response.status) || RETRYABLE_CODES.has(json.retCode)) {
-          throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg);
+          throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg ?? `HTTP ${response.status}`, { retCode: json.retCode });
         }
         if ([401, 403].includes(response.status) || FATAL_CODES.has(json.retCode)) {
           throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg, { retCode: json.retCode });
         }
-        if (WARN_CODES.has(json.retCode) || (!response.ok || json.retCode !== 0)) {
-          log.warn({ method, path, durationMs: Date.now() - Number(timestamp), retCode: json.retCode }, "Bybit action skipped");
-          throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg, { retCode: json.retCode });
+        if (WARN_CODES.has(json.retCode)) {
+          log.warn({ method, path, retCode: json.retCode }, "Bybit warn code; action skipped");
+          return json.result;
+        }
+        if (!response.ok || json.retCode !== 0) {
+          log.error({ method, path, retCode: json.retCode, message: json.retMsg }, "Bybit unexpected error");
+          throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg ?? `Unexpected retCode ${json.retCode}`, { retCode: json.retCode });
         }
         return json.result;
       } catch (error) {

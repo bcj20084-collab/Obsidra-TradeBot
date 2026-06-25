@@ -11,6 +11,7 @@ export class BinanceRestClient {
   constructor(private readonly apiKey: string, private readonly secret: string, testnet: boolean, private readonly paper: boolean) {
     this.baseUrl = testnet ? "https://testnet.binancefuture.com" : "https://fapi.binance.com";
   }
+  get isPaperTrading(): boolean { return this.paper; }
   async publicGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
     await this.limiter.take();
     const response = await fetch(`${this.baseUrl}${path}?${new URLSearchParams(params)}`);
@@ -31,7 +32,17 @@ export class BinanceRestClient {
     return json;
   }
   async placeOrder(params: OrderParams): Promise<OrderResult> {
-    if (this.paper) return { exchangeOrderId: `paper-binance-${randomUUID()}`, clientOrderId: params.clientOrderId, symbol: params.symbol, side: params.side, status: "Filled", avgFillPrice: params.price ?? 0, filledQty: params.qty, feeUsdt: 0, timestamp: Date.now() };
+    if (this.paper) return {
+      exchangeOrderId: `paper-binance-${randomUUID()}`,
+      clientOrderId: params.clientOrderId,
+      symbol: params.symbol,
+      side: params.side,
+      status: params.orderType === "Limit" ? "New" : "Filled",
+      avgFillPrice: params.price ?? 0,
+      filledQty: params.orderType === "Limit" ? 0 : params.qty,
+      feeUsdt: 0,
+      timestamp: Date.now(),
+    };
     const entry = await this.signed<{ orderId: number; avgPrice?: string; executedQty?: string }>("POST", "/fapi/v1/order", {
       symbol: params.symbol, side: params.side === "Buy" ? "BUY" : "SELL", type: params.orderType.toUpperCase(),
       quantity: String(params.qty), newClientOrderId: params.clientOrderId,

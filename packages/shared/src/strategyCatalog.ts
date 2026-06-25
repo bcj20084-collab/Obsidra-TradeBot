@@ -61,7 +61,13 @@ export function strategyCatalog(env: Env): StrategyDescriptor[] {
       exchange: env.COPY_EXCHANGE, symbol: "MULTI", isPaperTrading: env.PAPER_TRADING || env.COPY_PAPER_TRADING,
       maxPositionUsdt: env.COPY_MAX_SIZE_USDT, dailyLossLimit: env.DAILY_LOSS_LIMIT_USDT,
       maxDrawdownPct: env.MAX_DRAWDOWN_PCT,
-      params: { traderIds: env.COPY_TRADER_IDS.split(",").map((id) => id.trim()).filter(Boolean), ratioPct: env.COPY_RATIO_PCT },
+      params: {
+        traderIds: env.COPY_TRADER_IDS.split(",").map((id) => id.trim()).filter(Boolean),
+        ratioPct: env.COPY_RATIO_PCT,
+        positionFeedUrl: env.COPY_POSITION_FEED_URL,
+        pollIntervalMs: 5_000,
+        maxLeverage: 5,
+      },
     },
   ];
 }

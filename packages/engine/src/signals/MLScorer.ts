@@ -1,5 +1,5 @@
 import { prisma } from "@obsidra/shared";
-import { ML_FEATURE_NAMES, clamp01, normalizeSigned, vectorFromRecord } from "./MLFeatureExtractor.js";
+import { ML_FEATURE_NAMES, clamp01, normalizeSigned } from "./MLFeatureExtractor.js";
 
 export interface MlFeatures {
   rsi14Norm?: number;
@@ -48,40 +48,6 @@ export class MLScorer {
     return Math.max(-20, Math.min(20, (probability - 0.5) * 40));
   }
 
-  async retrain(): Promise<void> {
-    const trades = await prisma.trade.findMany({
-      where: { symbol: this.symbol, closedAt: { gte: new Date(Date.now() - 90 * 86_400_000) }, pnlUsdt: { not: null } },
-      orderBy: { closedAt: "asc" },
-    });
-    if (trades.length < 50 || trades.length % 50 !== 0) return;
-
-    const dataset = trades.flatMap((trade) => {
-      const signal = trade.signalData as Record<string, unknown>;
-      const raw = signal.mlFeatures as Record<string, unknown> | undefined;
-      if (!raw) return [];
-      return [{ x: vectorFromRecord(raw), y: (trade.pnlUsdt ?? 0) > (trade.feeUsdt ?? 0) ? 1 : 0 }];
-    });
-    if (dataset.length < 50) return;
-
-    const weights = [...this.weights];
-    let bias = this.bias;
-    for (let epoch = 0; epoch < 200; epoch++) {
-      for (let start = 0; start < dataset.length; start += 32) {
-        for (const row of dataset.slice(start, start + 32)) {
-          const predicted = sigmoid(bias + row.x.reduce((sum, value, index) => sum + value * weights[index]!, 0));
-          const error = row.y - predicted;
-          bias += 0.01 * error;
-          row.x.forEach((value, index) => { weights[index]! += 0.01 * (error * value - 0.001 * weights[index]!); });
-        }
-      }
-    }
-
-    this.weights = weights;
-    this.bias = bias;
-    this.completedTrades = trades.length;
-    await prisma.mlWeights.create({ data: { symbol: this.symbol, bias, weights, tradeCount: trades.length } });
-  }
-
   private vectorize(features: MlFeatures): number[] {
     const days = features.dayOfWeek?.slice(0, 7) ?? [];
     return [
@@ -107,8 +73,4 @@ export class MLScorer {
       clamp01(Math.min(3, features.recentProfitFactor ?? 1) / 3),
     ];
   }
-}
-
-function sigmoid(value: number): number {
-  return 1 / (1 + Math.exp(-value));
 }

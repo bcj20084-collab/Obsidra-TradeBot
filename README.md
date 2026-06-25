@@ -50,3 +50,8 @@ Railway restarts do not require days of candle accumulation.
 
 Railway runs API, dashboard assets and engine in one service through
 `scripts/start-production.mjs`; the database migration runs before every deployment.
+
+Copy trading requires an authorized HTTPS position feed configured through
+`COPY_POSITION_FEED_URL`. Bybit V5 does not provide a public API for reading an
+arbitrary master trader's positions by UID, so the strategy pauses safely when no
+feed is configured.

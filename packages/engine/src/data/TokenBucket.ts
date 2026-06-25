@@ -1,3 +1,7 @@
+import { moduleLogger } from "@obsidra/shared";
+
+const log = moduleLogger("TokenBucket");
+
 export class TokenBucket {
   private tokens: number;
   private lastRefill = Date.now();
@@ -18,7 +22,10 @@ export class TokenBucket {
         this.tokens -= 1;
         return;
       }
-      if (!warned && Date.now() - queuedAt > 500) warned = true;
+      if (!warned && Date.now() - queuedAt > 500) {
+        warned = true;
+        log.warn({ queuedMs: Date.now() - queuedAt }, "rate limiter queue pressure; consider reducing request rate");
+      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }

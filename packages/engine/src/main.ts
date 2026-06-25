@@ -15,6 +15,7 @@ import { DiscordNotifier } from "./monitoring/DiscordNotifier.js";
 import { startHealthServer } from "./monitoring/HealthCheck.js";
 import { MetricsCollector } from "./monitoring/MetricsCollector.js";
 import { TelegramNotifier } from "./monitoring/TelegramNotifier.js";
+import { adx, atr } from "./indicators/index.js";
 import { PreFlightCheck } from "./risk/PreFlightCheck.js";
 import { PortfolioRiskEngine } from "./risk/PortfolioRiskEngine.js";
 import { RiskEngine } from "./risk/RiskEngine.js";
@@ -49,7 +50,7 @@ const journal = new ExecutionJournal();
 const stateMachine = new OrderStateMachine(journal);
 const orderManager = new OrderManager(exchanges, stateMachine, journal);
 const preflight = new PreFlightCheck(store, client, env.SPREAD_MAX_PCT, bybitPaper);
-const reconciliation = new ReconciliationService(client, journal);
+const reconciliation = new ReconciliationService([bybitAdapter, binanceAdapter], journal);
 const metrics = new MetricsCollector();
 const trainer = new MLTrainer();
 const portfolio = new PortfolioRiskEngine({
@@ -61,10 +62,6 @@ const portfolio = new PortfolioRiskEngine({
   maxPositions: env.MAX_OPEN_POSITIONS_TOTAL,
 });
 const coordinator = new StrategyCoordinator(env.ALLOW_SAME_SYMBOL_HEDGE, env.PORTFOLIO_MAX_USDT_PER_SYMBOL);
-const strategies = activeDescriptors.map((descriptor) => createStrategy({
-  ...descriptor,
-  status: descriptor.isPaperTrading ? "PAPER" : "RUNNING",
-}));
 const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID);
 const discord = new DiscordNotifier(env.DISCORD_WEBHOOK_TRADES, env.DISCORD_WEBHOOK_ALERTS, env.DISCORD_WEBHOOK_DAILY);
 let status: BotStatus = "RUNNING";
@@ -81,6 +78,27 @@ const contexts = new Map(symbols.map((symbol) => {
     risk: new RiskEngine(env.DAILY_LOSS_LIMIT_USDT, env.WEEKLY_LOSS_LIMIT_USDT, env.MAX_DRAWDOWN_PCT, env.TRADING_POSITION_MAX_USDT, preflight, client, adaptive),
   }] as const;
 }));
+const strategies = activeDescriptors.map((descriptor) => createStrategy({
+  ...descriptor,
+  status: descriptor.isPaperTrading ? "PAPER" : "RUNNING",
+}, {
+  exchanges,
+  store,
+  orderManager,
+  journal,
+  riskForSymbol: (symbol, exchange) => exchange === "bybit" ? contexts.get(symbol)?.risk : undefined,
+  approveOrder: async (config, direction, sizeUsdt, symbol = config.symbol) => {
+    const conflict = coordinator.check(config.exchange, symbol, config.type, direction, sizeUsdt, config.id);
+    if (!conflict.approved) return conflict;
+    return portfolio.approve(config.exchange, symbol, sizeUsdt, ["DCA", "GRID"].includes(config.type) ? config.id : undefined);
+  },
+  registerOpen: (config, direction, sizeUsdt, symbol = config.symbol) => {
+    coordinator.open(config.exchange, symbol, { strategyId: config.id, type: config.type, direction, sizeUsdt });
+  },
+  unregisterOpen: (config, symbol = config.symbol) => {
+    coordinator.close(config.exchange, symbol, config.id);
+  },
+}));
 
 async function bootstrap(): Promise<void> {
   await prisma.$connect();
@@ -91,7 +109,11 @@ async function bootstrap(): Promise<void> {
   });
   await prisma.botEvent.create({ data: { type: "STARTED", message: `Engine started (${env.PAPER_TRADING ? "paper" : "live"})` } });
   await Promise.all([...contexts.values()].map((context) => context.ml.initialize()));
-  await Promise.all(symbols.map((symbol) => reconciliation.reconcile(symbol)));
+  const reconciliationSymbols = [...new Set([
+    ...symbols,
+    ...activeDescriptors.filter((descriptor) => descriptor.symbol !== "MULTI").map((descriptor) => descriptor.symbol),
+  ])];
+  await Promise.all(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol)));
   await restoreCoordinator();
   await Promise.all(strategies.map((strategy) => strategy.start()));
   subscribeStrategies();
@@ -100,7 +122,10 @@ async function bootstrap(): Promise<void> {
   startHealthServer(env.PORT + 1, () => metrics.latest);
   setInterval(refreshControl, 2_000).unref();
   setInterval(refreshMetrics, 300_000).unref();
-  setInterval(() => void Promise.all(symbols.map((symbol) => trainer.train(symbol))), 3_600_000).unref();
+  setInterval(() => void Promise.all(symbols.map(async (symbol) => {
+    await trainer.train(symbol);
+    await contexts.get(symbol)?.ml.initialize();
+  })), 3_600_000).unref();
   websocket.on("kline", (candle) => {
     if (candle.timeframe === "15" && candle.confirmed) void evaluate(candle.symbol);
   });
@@ -114,10 +139,10 @@ async function bootstrap(): Promise<void> {
 
 function subscribeStrategies(): void {
   for (const symbol of new Set(activeDescriptors.filter((item) => item.exchange === "bybit" && item.symbol !== "MULTI").map((item) => item.symbol))) {
-    bybitAdapter.subscribeCandles(symbol, ["1", "15", "60", "240"], (candle) => void dispatchStrategyCandle("bybit", candle));
+    bybitAdapter.subscribeCandles(symbol, ["1", "3", "15", "60", "240"], (candle) => void dispatchStrategyCandle("bybit", candle));
   }
   for (const symbol of new Set(activeDescriptors.filter((item) => item.exchange === "binance" && item.symbol !== "MULTI").map((item) => item.symbol))) {
-    binanceAdapter.subscribeCandles(symbol, ["1", "15", "60", "240"], (candle) => void dispatchStrategyCandle("binance", candle));
+    binanceAdapter.subscribeCandles(symbol, ["1", "3", "15", "60", "240"], (candle) => void dispatchStrategyCandle("binance", candle));
   }
   binanceWebsocket.on("fatal", () => {
     log.error("Binance WebSocket reconnect exhausted");
@@ -127,6 +152,20 @@ function subscribeStrategies(): void {
 
 async function dispatchStrategyCandle(exchange: "bybit" | "binance", candle: Parameters<typeof bybitAdapter.subscribeCandles>[2] extends (value: infer T) => void ? T : never): Promise<void> {
   if (!candle.confirmed) return;
+  if (exchange === "binance") {
+    store.addCandle({
+      symbol: candle.symbol,
+      timeframe: candle.interval,
+      openTime: candle.openTime,
+      closeTime: candle.closeTime,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+      confirmed: candle.confirmed,
+    });
+  }
   const matching = strategies.filter((strategy) => strategy.config.exchange === exchange && strategy.config.symbol === candle.symbol);
   await Promise.all(matching.map(async (strategy) => {
     try {
@@ -139,7 +178,11 @@ async function dispatchStrategyCandle(exchange: "bybit" | "binance", candle: Par
 }
 
 async function restoreCoordinator(): Promise<void> {
-  const open = await prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
+  const [open, gridLevels, dcaPositions] = await Promise.all([
+    prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
+    prisma.gridLevel.findMany({ where: { status: "ACTIVE" } }),
+    prisma.dCAPosition.findMany({ where: { status: { in: ["ACTIVE", "WAITING"] }, totalInvestedUsdt: { gt: 0 } } }),
+  ]);
   for (const trade of open) {
     const descriptor = descriptors.find((item) => item.id === trade.strategyId);
     coordinator.open(trade.exchange as "bybit" | "binance", trade.symbol, {
@@ -149,12 +192,24 @@ async function restoreCoordinator(): Promise<void> {
       sizeUsdt: trade.positionSizeUsdt,
     });
   }
+  for (const descriptor of descriptors.filter((item) => item.type === "GRID")) {
+    const exposure = gridLevels.filter((level) => level.strategyId === descriptor.id).reduce((sum, level) => sum + level.orderSizeUsdt, 0);
+    if (exposure > 0) coordinator.open(descriptor.exchange, descriptor.symbol, { strategyId: descriptor.id, type: "GRID", direction: "LONG", sizeUsdt: exposure });
+  }
+  for (const position of dcaPositions) {
+    coordinator.open(position.exchange as "bybit" | "binance", position.symbol, {
+      strategyId: position.strategyId,
+      type: "DCA",
+      direction: position.direction as Direction,
+      sizeUsdt: position.totalInvestedUsdt,
+    });
+  }
 }
 
 async function warmMarketData(): Promise<void> {
   for (const symbol of symbols) {
     try {
-      for (const timeframe of ["1", "15", "60", "240"]) {
+      for (const timeframe of ["1", "3", "15", "60", "240"]) {
         const candles = await client.getKlines(symbol, timeframe, 200);
         for (const candle of candles) store.addCandle(candle);
       }
@@ -172,7 +227,23 @@ async function evaluate(symbol: string): Promise<void> {
   if (!context) return;
   processing.add(symbol);
   try {
-    const signal = context.signals.evaluate(symbol);
+    const h4 = store.getCandles(symbol, "240");
+    if (h4.length >= 80) {
+      const atrSeries = atr(h4);
+      const atrValue = atrSeries.at(-1) ?? 0;
+      const recentAtr = atrSeries.slice(-20);
+      const averageAtr = recentAtr.length ? recentAtr.reduce((sum, value) => sum + value, 0) / recentAtr.length : atrValue;
+      const adxValue = adx(h4).at(-1) ?? 0;
+      let equity = 10_000;
+      if (!bybitPaper) {
+        try { equity = await client.getWalletEquity(); } catch (error) { log.warn({ symbol, error }, "wallet equity unavailable for adaptive update"); }
+      }
+      const history = await prisma.dailyMetrics.findMany({ orderBy: { date: "desc" }, take: 30, select: { equityEnd: true } });
+      const peak = Math.max(equity, ...history.map((item) => item.equityEnd));
+      const drawdown = peak > 0 ? ((peak - equity) / peak) * 100 : 0;
+      await context.adaptive.update(atrValue, averageAtr, adxValue, drawdown);
+    }
+    const signal = await context.signals.evaluate(symbol);
     if (!signal) return;
     await journal.record("SIGNAL_GENERATED", { signal });
     const decision = await context.risk.approve(symbol, signal);
@@ -223,8 +294,9 @@ async function refreshControl(): Promise<void> {
 }
 
 async function refreshMetrics(): Promise<void> {
-  const first = contexts.values().next().value;
-  if (first) await metrics.collect(status, first.adaptive.snapshot.regime, first.adaptive.snapshot.config);
+  const snapshots = [...contexts.entries()].map(([symbol, context]) => ({ symbol, ...context.adaptive.snapshot }));
+  const primary = snapshots[0];
+  if (primary) await metrics.collect(status, primary.regime, primary.config, snapshots);
 }
 
 async function shutdown(signal: string): Promise<void> {

@@ -49,3 +49,8 @@ production environment configuration. Start with the smallest allowed position c
 The repository provides the platform and conservative controls, but no strategy can
 guarantee profit. Backtesting, slippage modelling, exchange-specific quantity rounding,
 and external security review remain mandatory before real funds are used.
+# Copy trading data source
+
+Set `COPY_POSITION_FEED_URL` only to an authorized HTTPS endpoint that returns an
+array of `{ symbol, direction, size, entryPrice, leverage }` records for the
+requested `traderId`. The copy strategy remains paused when this value is empty.

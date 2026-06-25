@@ -74,4 +74,39 @@ export class OrderManager {
       throw error;
     }
   }
+
+  async close(tradeId: string, reason: string): Promise<void> {
+    const trade = await prisma.trade.findUniqueOrThrow({ where: { id: tradeId } });
+    if (!["OPEN", "FILLED", "PARTIALLY_FILLED"].includes(trade.status) || !trade.entryPrice) return;
+    await this.stateMachine.transition(trade.id, "CLOSING", reason);
+    try {
+      const quantity = Number((trade.positionSizeUsdt / trade.entryPrice).toFixed(6));
+      const result = await this.exchanges.placeOrder(trade.exchange as ExchangeId, {
+        symbol: trade.symbol,
+        side: trade.direction === "LONG" ? "Sell" : "Buy",
+        orderType: "Market",
+        qty: quantity,
+        reduceOnly: true,
+        clientOrderId: `close-${randomUUID()}`.slice(0, 36),
+      });
+      const exitPrice = result.avgFillPrice || trade.entryPrice;
+      const grossPnl = trade.direction === "LONG"
+        ? (exitPrice - trade.entryPrice) * quantity
+        : (trade.entryPrice - exitPrice) * quantity;
+      await prisma.trade.update({
+        where: { id: trade.id },
+        data: {
+          exitPrice,
+          pnlUsdt: grossPnl - (trade.feeUsdt ?? 0) - result.feeUsdt,
+          feeUsdt: (trade.feeUsdt ?? 0) + result.feeUsdt,
+          closeReason: reason,
+          closedAt: new Date(),
+        },
+      });
+      await this.stateMachine.transition(trade.id, "CLOSED", reason, { exchangeOrderId: result.exchangeOrderId });
+    } catch (error) {
+      await this.stateMachine.transition(trade.id, "ERROR", "Close order failed", { error: String(error) });
+      throw error;
+    }
+  }
 }

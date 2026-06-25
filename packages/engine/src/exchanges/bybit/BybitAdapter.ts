@@ -1,10 +1,14 @@
+import { moduleLogger } from "@obsidra/shared";
 import type { IExchangeAdapter, OHLCVCandle, OrderParams, OrderResult, Position } from "../IExchangeAdapter.js";
 import type { BybitRestClient } from "../../data/BybitRestClient.js";
 import type { BybitWebSocket } from "../../data/BybitWebSocket.js";
 import type { MarketDataStore } from "../../data/MarketDataStore.js";
 
+const log = moduleLogger("BybitAdapter");
+
 export class BybitAdapter implements IExchangeAdapter {
   readonly exchangeId = "bybit" as const;
+  get paperTrading(): boolean { return this.rest.isPaperTrading; }
   constructor(private readonly rest: BybitRestClient, private readonly ws: BybitWebSocket, private readonly store: MarketDataStore) {}
   subscribeCandles(symbol: string, intervals: string[], callback: (candle: OHLCVCandle) => void): void {
     this.ws.on("kline", (candle) => {
@@ -39,9 +43,51 @@ export class BybitAdapter implements IExchangeAdapter {
   async placeOrder(params: OrderParams): Promise<OrderResult> {
     const result = await this.rest.placeOrder({
       symbol: params.symbol, side: params.side, qty: String(params.qty),
-      stopLoss: String(params.stopLoss ?? ""), takeProfit: String(params.takeProfit ?? ""),
+      orderType: params.orderType,
+      ...(params.price ? { price: String(params.price) } : {}),
+      ...(params.stopLoss ? { stopLoss: String(params.stopLoss) } : {}),
+      ...(params.takeProfit ? { takeProfit: String(params.takeProfit) } : {}),
+      ...(params.reduceOnly ? { reduceOnly: true } : {}),
       clientOrderId: params.clientOrderId,
     });
+    if (result.paper) {
+      return {
+        exchangeOrderId: result.orderId,
+        clientOrderId: params.clientOrderId,
+        symbol: params.symbol,
+        side: params.side,
+        status: params.orderType === "Limit" ? "New" : "Filled",
+        avgFillPrice: params.price ?? 0,
+        filledQty: params.orderType === "Limit" ? 0 : params.qty,
+        feeUsdt: 0,
+        timestamp: Date.now(),
+      };
+    }
+    if (params.orderType === "Limit") {
+      return { exchangeOrderId: result.orderId, clientOrderId: params.clientOrderId, symbol: params.symbol, side: params.side, status: "New", avgFillPrice: 0, filledQty: 0, feeUsdt: 0, timestamp: Date.now() };
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        const fill = await this.rest.getOrderHistory(params.symbol, params.clientOrderId);
+        if (fill?.avgPrice) {
+          return {
+            exchangeOrderId: result.orderId,
+            clientOrderId: params.clientOrderId,
+            symbol: params.symbol,
+            side: params.side,
+            status: fill.status === "Filled" ? "Filled" : "New",
+            avgFillPrice: fill.avgPrice,
+            filledQty: fill.filledQty || params.qty,
+            feeUsdt: fill.feeUsdt,
+            timestamp: Date.now(),
+          };
+        }
+      } catch (error) {
+        log.warn({ attempt, error, clientOrderId: params.clientOrderId }, "fill-price poll failed");
+      }
+    }
+    log.warn({ clientOrderId: params.clientOrderId }, "avgFillPrice unavailable, using signal price fallback");
     return { exchangeOrderId: result.orderId, clientOrderId: params.clientOrderId, symbol: params.symbol, side: params.side, status: "New", avgFillPrice: 0, filledQty: params.qty, feeUsdt: 0, timestamp: Date.now() };
   }
   cancelOrder(symbol: string, orderId: string) { return this.rest.cancelOrder(symbol, orderId); }

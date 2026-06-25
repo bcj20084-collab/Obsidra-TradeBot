@@ -1,6 +1,7 @@
 import { prisma, moduleLogger } from "@obsidra/shared";
 import { ML_FEATURE_NAMES, vectorFromRecord } from "./MLFeatureExtractor.js";
 import { walkForwardEfficiency } from "../backtesting/WalkForwardOptimizer.js";
+import { deterministicShuffle } from "./SeededShuffle.js";
 
 const log = moduleLogger("MLTrainer");
 
@@ -110,10 +111,6 @@ function crossValidate(dataset: TrainingRow[], folds: number) {
     profitFactor: mean(scores.map((score) => score.profitFactor)),
     outOfSampleProfitFactor: mean(scores.slice(-1).map((score) => score.profitFactor)),
   };
-}
-
-function deterministicShuffle<T>(items: T[], seed: number): T[] {
-  return [...items].sort((_, __) => Math.sin(seed += 1) - 0.5);
 }
 
 function mean(values: number[]): number {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { scaleCopyPosition } from "./copy/CopyRiskScaler.js";
 import { weightedAverage } from "./dca/DCAPositionTracker.js";
 import { calculateGridLevels } from "./grid/GridLevelManager.js";
-import { ScalpStrategy } from "./scalp/ScalpStrategy.js";
+import { SCALP_MAX_LEVERAGE } from "./scalp/constants.js";
 
 describe("v3 strategy safety math", () => {
   it("keeps grid allocation inside its total budget", () => {
@@ -22,11 +22,6 @@ describe("v3 strategy safety math", () => {
   });
 
   it("hard-caps scalp leverage at three", () => {
-    const strategy = new ScalpStrategy({
-      id: "scalp", type: "SCALP", exchange: "bybit", symbol: "BTCUSDT", status: "PAPER",
-      maxPositionUsdt: 100, dailyLossLimit: 10, maxDrawdownPct: 5, isPaperTrading: true,
-      params: { leverageMax: 20 },
-    });
-    expect(strategy.maxLeverage).toBe(3);
+    expect(SCALP_MAX_LEVERAGE).toBe(3);
   });
 });

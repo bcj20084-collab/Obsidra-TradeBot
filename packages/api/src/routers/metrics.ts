@@ -1,4 +1,4 @@
-import { prisma, type LiveMetrics } from "@obsidra/shared";
+import { getEnv, prisma, tradingSymbols, type AdaptiveConfig, type LiveMetrics, type MarketRegime } from "@obsidra/shared";
 import { protectedProcedure, router } from "../trpc.js";
 
 export const metricsRouter = router({
@@ -10,6 +10,15 @@ export const metricsRouter = router({
     const losses = pnl.filter((value) => value < 0);
     const total = pnl.reduce((sum, value) => sum + value, 0);
     const daily = await prisma.dailyMetrics.findMany({ orderBy: { date: "asc" }, take: 30 });
+    const defaultConfig: AdaptiveConfig = { minSignalScore: 65, slMultiplier: 1.5, tpMultiplier: 2.5, maxPositionPct: 2, leverageMax: 5, trailingStopPct: 1.5 };
+    const perSymbolRegimes = await Promise.all(tradingSymbols(getEnv()).map(async (symbol) => {
+      const latest = await prisma.adaptiveLog.findFirst({ where: { symbol }, orderBy: { createdAt: "desc" } });
+      return {
+        symbol,
+        regime: (latest?.regime as MarketRegime | undefined) ?? "NORMAL",
+        config: (latest?.config as unknown as AdaptiveConfig | undefined) ?? defaultConfig,
+      };
+    }));
     return {
       totalPnlUsdt: total,
       totalPnlPct: total / 100,
@@ -31,8 +40,9 @@ export const metricsRouter = router({
       uptime: 0,
       lastTradeAt: trades.at(-1)?.closedAt?.toISOString() ?? null,
       botStatus: (state?.status as LiveMetrics["botStatus"]) ?? "STOPPED",
-      marketRegime: "NORMAL",
-      adaptiveConfig: { minSignalScore: 65, slMultiplier: 1.5, tpMultiplier: 2.5, maxPositionPct: 2, leverageMax: 5, trailingStopPct: 1.5 },
+      marketRegime: perSymbolRegimes[0]?.regime ?? "NORMAL",
+      adaptiveConfig: perSymbolRegimes[0]?.config ?? defaultConfig,
+      perSymbolRegimes,
       equityCurve: daily.map((item) => ({ date: item.date, equity: item.equityEnd })),
     };
   }),

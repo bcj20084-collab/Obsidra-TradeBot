@@ -1,4 +1,4 @@
-import type { SignalResult } from "@obsidra/shared";
+import { prisma, type SignalResult } from "@obsidra/shared";
 import { adx, atr, bollingerBands, ema, macd, rsi } from "../indicators/index.js";
 import type { MarketDataStore } from "../data/MarketDataStore.js";
 import type { CircuitBreaker } from "./CircuitBreaker.js";
@@ -14,7 +14,7 @@ export class SignalEngine {
     private readonly circuitBreaker: CircuitBreaker,
   ) {}
 
-  evaluate(symbol: string): SignalResult | null {
+  async evaluate(symbol: string): Promise<SignalResult | null> {
     const h4 = this.store.getCandles(symbol, "240");
     const m15 = this.store.getCandles(symbol, "15");
     const ticker = this.store.getTicker(symbol);
@@ -55,6 +55,19 @@ export class SignalEngine {
     const priceVsEma21 = (price - ema21) / Math.max(atrValue, Number.EPSILON);
     const priceVsEma55 = (price - ema55) / Math.max(atrValue, Number.EPSILON);
     const dayOfWeek = Array.from({ length: 7 }, (_, day) => Number(day === now.getUTCDay()));
+    const recentTrades = await prisma.trade.findMany({
+      where: { symbol, status: "CLOSED" },
+      orderBy: { closedAt: "desc" },
+      take: 20,
+      select: { pnlUsdt: true, feeUsdt: true },
+    });
+    const recentWins = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > (trade.feeUsdt ?? 0)).length;
+    const recentWinRate = recentTrades.length ? recentWins / recentTrades.length : 0.5;
+    const recentWinSum = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0)
+      .reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+    const recentLossSum = Math.abs(recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) < 0)
+      .reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0));
+    const recentProfitFactor = recentLossSum > 0 ? Math.min(3, recentWinSum / recentLossSum) : 1;
     const features: MlFeatures = {
       rsi14Norm: rsiValue / 100,
       macdHistogramNorm: macdAtr,
@@ -68,8 +81,8 @@ export class SignalEngine {
       hourCos: Math.cos((2 * Math.PI * now.getUTCHours()) / 24),
       dayOfWeek,
       fundingRateNorm: (ticker.fundingRate + 0.001) / 0.002,
-      recentWinRate: 0.5,
-      recentProfitFactor: 1,
+      recentWinRate,
+      recentProfitFactor,
     };
     const mlFeatures = buildFeatureVector({
       rsi_14_norm: features.rsi14Norm ?? 0.5,
@@ -90,8 +103,8 @@ export class SignalEngine {
       day_fri: dayOfWeek[5] ?? 0,
       day_sat: dayOfWeek[6] ?? 0,
       day_sun: dayOfWeek[0] ?? 0,
-      recent_win_rate: 0.5,
-      recent_pf: 1 / 3,
+      recent_win_rate: recentWinRate,
+      recent_pf: recentProfitFactor / 3,
     });
     const mlAdjustment = this.ml.score(features);
     const score = Math.max(0, Math.min(100, baseScore + mlAdjustment));

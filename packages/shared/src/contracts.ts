@@ -70,6 +70,7 @@ export interface LiveMetrics {
   botStatus: BotStatus;
   marketRegime: MarketRegime;
   adaptiveConfig: AdaptiveConfig;
+  perSymbolRegimes?: Array<{ symbol: string; regime: MarketRegime; config: AdaptiveConfig }>;
   equityCurve: Array<{ date: string; equity: number }>;
   symbols?: Record<string, { pnl: number; trades: number; winRate: number; openPosition: boolean }>;
   totalExposureUsdt?: number;

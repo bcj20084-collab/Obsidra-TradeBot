@@ -79,6 +79,7 @@ export const envSchema = z
     COPY_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
     COPY_RATIO_PCT: z.coerce.number().positive().max(100).default(10),
     COPY_MAX_SIZE_USDT: z.coerce.number().positive().default(200),
+    COPY_POSITION_FEED_URL: optionalUrl,
     COPY_PAPER_TRADING: boolString.default("true"),
     VITE_API_URL: z.string().url().default("http://localhost:3000"),
     API_ORIGIN: z.string().url().default("http://localhost:5173"),

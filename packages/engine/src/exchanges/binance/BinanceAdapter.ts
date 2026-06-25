@@ -4,6 +4,7 @@ import type { BinanceWebSocket } from "./BinanceWebSocket.js";
 
 export class BinanceAdapter implements IExchangeAdapter {
   readonly exchangeId = "binance" as const;
+  get paperTrading(): boolean { return this.rest.isPaperTrading; }
   constructor(private readonly rest: BinanceRestClient, private readonly ws: BinanceWebSocket) {}
   subscribeCandles(symbol: string, intervals: string[], callback: (c: OHLCVCandle) => void): void {
     this.ws.on("candle", (incoming, candle) => { if (incoming === symbol) callback(candle); });

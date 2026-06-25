@@ -42,7 +42,7 @@ export class BybitWebSocket extends EventEmitter<Events> {
   ) {
     super();
     this.topics = symbols.flatMap((symbol) => [
-      ...["1", "15", "60", "240"].map((tf) => `kline.${tf}.${symbol}`),
+      ...["1", "3", "15", "60", "240"].map((tf) => `kline.${tf}.${symbol}`),
       `orderbook.1.${symbol}`,
       `tickers.${symbol}`,
     ]);

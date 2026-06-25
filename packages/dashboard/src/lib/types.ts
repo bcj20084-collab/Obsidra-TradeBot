@@ -13,6 +13,7 @@ export interface Metrics {
   marketRegime: string;
   equityCurve: Array<{ date: string; equity: number }>;
   adaptiveConfig: Record<string, number>;
+  perSymbolRegimes?: Array<{ symbol: string; regime: string; config: Record<string, number> }>;
 }
 
 export interface Trade {

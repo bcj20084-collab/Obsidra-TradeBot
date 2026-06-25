@@ -18,11 +18,13 @@ export const strategiesRouter = router({
       prisma.strategyMetrics.findMany({ orderBy: { date: "desc" } }),
     ]);
     return strategyCatalog(getEnv()).map((strategy) => {
+      const { positionFeedUrl: _positionFeedUrl, ...publicParams } = strategy.params;
       const trades = tradeStats.find((item) => item.strategyId === strategy.id);
       const open = openTrades.find((item) => item.strategyId === strategy.id);
       const latest = metricRows.find((item) => item.strategyId === strategy.id);
       return {
         ...strategy,
+        params: publicParams,
         status: !strategy.enabled ? "DISABLED" : strategy.isPaperTrading ? "PAPER" : "LIVE",
         pnlUsdt: latest?.pnlUsdt ?? trades?._sum.pnlUsdt ?? 0,
         feesUsdt: latest?.feesUsdt ?? trades?._sum.feeUsdt ?? 0,

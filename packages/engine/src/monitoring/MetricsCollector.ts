@@ -4,7 +4,12 @@ export class MetricsCollector {
   private cached?: LiveMetrics;
   private readonly startedAt = Date.now();
 
-  async collect(status: LiveMetrics["botStatus"], regime: MarketRegime, adaptiveConfig: AdaptiveConfig): Promise<LiveMetrics> {
+  async collect(
+    status: LiveMetrics["botStatus"],
+    regime: MarketRegime,
+    adaptiveConfig: AdaptiveConfig,
+    perSymbolRegimes?: Array<{ symbol: string; regime: MarketRegime; config: AdaptiveConfig }>,
+  ): Promise<LiveMetrics> {
     const trades = await prisma.trade.findMany({ where: { status: "CLOSED" }, orderBy: { closedAt: "asc" } });
     const pnl = trades.map((trade) => trade.pnlUsdt ?? 0);
     const wins = pnl.filter((value) => value > 0);
@@ -49,6 +54,7 @@ export class MetricsCollector {
       botStatus: status,
       marketRegime: regime,
       adaptiveConfig,
+      ...(perSymbolRegimes ? { perSymbolRegimes } : {}),
       equityCurve: daily.map((item) => ({ date: item.date, equity: item.equityEnd })),
       symbols: Object.fromEntries(symbolNames.map((symbol) => {
         const symbolTrades = trades.filter((trade) => trade.symbol === symbol);
@@ -64,7 +70,7 @@ export class MetricsCollector {
       openPositionsCount: openTrades.length,
       mlAccuracy: (await prisma.mlWeights.findFirst({ orderBy: { trainedAt: "desc" } }))?.cvAccuracy ?? null,
     };
-    return this.cached;
+    return this.cached!;
   }
 
   get latest(): LiveMetrics | undefined {
