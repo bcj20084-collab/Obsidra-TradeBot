@@ -1,4 +1,4 @@
-import { prisma, type AdaptiveConfig, type LiveMetrics, type MarketRegime } from "@obsidra/shared";
+import { premiumLog, prisma, type AdaptiveConfig, type LiveMetrics, type MarketRegime } from "@obsidra/shared";
 
 export class MetricsCollector {
   private cached?: LiveMetrics;
@@ -70,6 +70,24 @@ export class MetricsCollector {
       openPositionsCount: openTrades.length,
       mlAccuracy: (await prisma.mlWeights.findFirst({ orderBy: { trainedAt: "desc" } }))?.cvAccuracy ?? null,
     };
+    premiumLog("metrics", "metrics_collected", {
+      status,
+      regime,
+      totalPnlUsdt: this.cached.totalPnlUsdt,
+      totalPnlPct: this.cached.totalPnlPct,
+      winRate: this.cached.winRate,
+      profitFactor: this.cached.profitFactor,
+      totalTrades: this.cached.totalTrades,
+      tradesLast24h: this.cached.tradesLast24h,
+      signalsGenerated24h: this.cached.signalsGenerated24h,
+      signalsRejected24h: this.cached.signalsRejected24h,
+      totalExposureUsdt: this.cached.totalExposureUsdt,
+      openPositionsCount: this.cached.openPositionsCount,
+      currentDrawdown: this.cached.currentDrawdown,
+      maxDrawdown: this.cached.maxDrawdown,
+      uptime: this.cached.uptime,
+      mlAccuracy: this.cached.mlAccuracy,
+    }, "info", "premium metrics collected");
     return this.cached!;
   }
 
