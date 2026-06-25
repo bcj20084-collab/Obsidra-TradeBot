@@ -6,6 +6,7 @@ import type { RiskDecision } from "../risk/RiskEngine.js";
 import { sideFor } from "../risk/RiskEngine.js";
 import type { ExecutionJournal } from "./ExecutionJournal.js";
 import type { OrderStateMachine } from "./OrderStateMachine.js";
+import { calculateOrderQuantity } from "./ExecutionMath.js";
 
 export class OrderManager {
   constructor(
@@ -46,7 +47,8 @@ export class OrderManager {
     await this.journal.record("ORDER_INTENT", { signal, risk, clientOrderId }, trade.id);
     await this.stateMachine.transition(trade.id, "SUBMITTED", `Write-ahead transition before ${exchange} API`);
     try {
-      const quantity = Number((risk.positionSizeUsdt / signal.entryPrice).toFixed(6));
+      const quantity = calculateOrderQuantity(risk.positionSizeUsdt, risk.leverage, signal.entryPrice);
+      await this.exchanges.get(exchange).setLeverage(symbol, risk.leverage);
       const result = await this.exchanges.placeOrder(exchange, {
         symbol,
         side: sideFor(signal.direction),
@@ -80,8 +82,15 @@ export class OrderManager {
     if (!["OPEN", "FILLED", "PARTIALLY_FILLED"].includes(trade.status) || !trade.entryPrice) return;
     await this.stateMachine.transition(trade.id, "CLOSING", reason);
     try {
-      const quantity = Number((trade.positionSizeUsdt / trade.entryPrice).toFixed(6));
-      const result = await this.exchanges.placeOrder(trade.exchange as ExchangeId, {
+      const exchange = trade.exchange as ExchangeId;
+      const adapter = this.exchanges.get(exchange);
+      const expectedSide = trade.direction === "LONG" ? "Long" : "Short";
+      const exchangePosition = await adapter.getOpenPositions(trade.symbol)
+        .then((positions) => positions.find((position) => position.symbol === trade.symbol && position.side === expectedSide))
+        .catch(() => undefined);
+      const quantity = exchangePosition?.size
+        ?? calculateOrderQuantity(trade.positionSizeUsdt, trade.leverage, trade.entryPrice);
+      const result = await this.exchanges.placeOrder(exchange, {
         symbol: trade.symbol,
         side: trade.direction === "LONG" ? "Sell" : "Buy",
         orderType: "Market",

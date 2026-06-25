@@ -11,6 +11,7 @@ export class DCAStrategy extends BaseStrategy {
   private positionId: string | undefined;
   private lastOrderPrice: number | undefined;
   private safetyOrders = 0;
+  private processing = false;
 
   constructor(
     config: ConstructorParameters<typeof BaseStrategy>[0],
@@ -50,7 +51,16 @@ export class DCAStrategy extends BaseStrategy {
   }
 
   async onCandle(candle: OHLCVCandle): Promise<void> {
-    if (!["RUNNING", "PAPER"].includes(this.metrics.status)) return;
+    if (this.processing || !["RUNNING", "PAPER"].includes(this.metrics.status)) return;
+    this.processing = true;
+    try {
+      await this.processCandle(candle);
+    } finally {
+      this.processing = false;
+    }
+  }
+
+  private async processCandle(candle: OHLCVCandle): Promise<void> {
     if (!this.positionId) await this.start();
     if (!this.positionId) return;
     const params = this.config.params;

@@ -26,22 +26,23 @@ import { SignalEngine } from "./signals/SignalEngine.js";
 import { MLTrainer } from "./signals/MLTrainer.js";
 import { createStrategy } from "./strategies/StrategyFactory.js";
 import { StrategyCoordinator } from "./strategies/StrategyCoordinator.js";
-import { SymbolRegistry } from "./symbols/SymbolRegistry.js";
+import type { ExchangeId, IExchangeAdapter } from "./exchanges/IExchangeAdapter.js";
 
 const env = getEnv();
 const log = moduleLogger("engine");
-const store = new MarketDataStore();
 const symbols = tradingSymbols(env);
 const descriptors = strategyCatalog(env);
 const activeDescriptors = descriptors.filter((item) => item.enabled);
 const bybitSymbols = activeDescriptors.filter((item) => item.exchange === "bybit" && item.symbol !== "MULTI").map((item) => item.symbol);
 const marketSymbols = [...new Set([...symbols, ...bybitSymbols])];
-const registry = new SymbolRegistry(symbols);
+const bybitStore = new MarketDataStore();
+const binanceStore = new MarketDataStore();
+const marketStores = new Map<ExchangeId, MarketDataStore>([["bybit", bybitStore], ["binance", binanceStore]]);
 const bybitPaper = activeDescriptors.filter((item) => item.exchange === "bybit").every((item) => item.isPaperTrading);
 const binancePaper = activeDescriptors.filter((item) => item.exchange === "binance").every((item) => item.isPaperTrading);
 const client = new BybitRestClient(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY, env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET, env.BYBIT_TESTNET, bybitPaper, env.MASTER_SECRET);
-const websocket = new BybitWebSocket(store, marketSymbols, env.BYBIT_TESTNET);
-const bybitAdapter = new BybitAdapter(client, websocket, store);
+const websocket = new BybitWebSocket(bybitStore, marketSymbols, env.BYBIT_TESTNET);
+const bybitAdapter = new BybitAdapter(client, websocket, bybitStore);
 const binanceRest = new BinanceRestClient(env.BINANCE_API_KEY, env.BINANCE_API_SECRET, env.BINANCE_TESTNET, binancePaper);
 const binanceWebsocket = new BinanceWebSocket(env.BINANCE_TESTNET);
 const binanceAdapter = new BinanceAdapter(binanceRest, binanceWebsocket);
@@ -49,7 +50,6 @@ const exchanges = new ExchangeRouter([bybitAdapter, binanceAdapter]);
 const journal = new ExecutionJournal();
 const stateMachine = new OrderStateMachine(journal);
 const orderManager = new OrderManager(exchanges, stateMachine, journal);
-const preflight = new PreFlightCheck(store, client, env.SPREAD_MAX_PCT, bybitPaper);
 const reconciliation = new ReconciliationService([bybitAdapter, binanceAdapter], journal);
 const metrics = new MetricsCollector();
 const trainer = new MLTrainer();
@@ -66,27 +66,70 @@ const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_
 const discord = new DiscordNotifier(env.DISCORD_WEBHOOK_TRADES, env.DISCORD_WEBHOOK_ALERTS, env.DISCORD_WEBHOOK_DAILY);
 let status: BotStatus = "RUNNING";
 const processing = new Set<string>();
-const contexts = new Map(symbols.map((symbol) => {
+const closeWatchers = new Set<string>();
+
+interface TradingContext {
+  exchange: ExchangeId;
+  symbol: string;
+  adapter: IExchangeAdapter;
+  store: MarketDataStore;
+  adaptive: AdaptiveParams;
+  circuitBreaker: CircuitBreaker;
+  ml: MLScorer;
+  signals: SignalEngine;
+  risk: RiskEngine;
+}
+
+function contextKey(exchange: ExchangeId, symbol: string): string {
+  return `${exchange}:${symbol}`;
+}
+
+function createContext(exchange: ExchangeId, symbol: string): TradingContext {
+  const adapter = exchanges.get(exchange);
+  const store = marketStores.get(exchange)!;
   const adaptive = new AdaptiveParams(symbol);
   const circuitBreaker = new CircuitBreaker();
   const ml = new MLScorer(symbol);
-  return [symbol, {
+  const preflight = new PreFlightCheck(adapter, env.SPREAD_MAX_PCT);
+  return {
+    exchange,
+    symbol,
+    adapter,
+    store,
     adaptive,
     circuitBreaker,
     ml,
     signals: new SignalEngine(store, ml, adaptive, circuitBreaker),
-    risk: new RiskEngine(env.DAILY_LOSS_LIMIT_USDT, env.WEEKLY_LOSS_LIMIT_USDT, env.MAX_DRAWDOWN_PCT, env.TRADING_POSITION_MAX_USDT, preflight, client, adaptive),
-  }] as const;
-}));
+    risk: new RiskEngine(env.DAILY_LOSS_LIMIT_USDT, env.WEEKLY_LOSS_LIMIT_USDT, env.MAX_DRAWDOWN_PCT, env.TRADING_POSITION_MAX_USDT, preflight, adapter, adaptive),
+  };
+}
+
+const initialPairs = new Map<string, { exchange: ExchangeId; symbol: string }>();
+for (const symbol of symbols) initialPairs.set(contextKey("bybit", symbol), { exchange: "bybit", symbol });
+for (const descriptor of activeDescriptors) {
+  if (descriptor.symbol !== "MULTI") initialPairs.set(contextKey(descriptor.exchange, descriptor.symbol), { exchange: descriptor.exchange, symbol: descriptor.symbol });
+}
+const contexts = new Map([...initialPairs].map(([key, pair]) => [key, createContext(pair.exchange, pair.symbol)]));
+
+function getOrCreateContext(exchange: ExchangeId, symbol: string): TradingContext {
+  const key = contextKey(exchange, symbol);
+  const existing = contexts.get(key);
+  if (existing) return existing;
+  const created = createContext(exchange, symbol);
+  contexts.set(key, created);
+  void created.ml.initialize();
+  return created;
+}
+
 const strategies = activeDescriptors.map((descriptor) => createStrategy({
   ...descriptor,
   status: descriptor.isPaperTrading ? "PAPER" : "RUNNING",
 }, {
   exchanges,
-  store,
+  storeFor: (exchange) => marketStores.get(exchange)!,
   orderManager,
   journal,
-  riskForSymbol: (symbol, exchange) => exchange === "bybit" ? contexts.get(symbol)?.risk : undefined,
+  riskForSymbol: (symbol, exchange) => getOrCreateContext(exchange, symbol).risk,
   approveOrder: async (config, direction, sizeUsdt, symbol = config.symbol) => {
     const conflict = coordinator.check(config.exchange, symbol, config.type, direction, sizeUsdt, config.id);
     if (!conflict.approved) return conflict;
@@ -98,6 +141,7 @@ const strategies = activeDescriptors.map((descriptor) => createStrategy({
   unregisterOpen: (config, symbol = config.symbol) => {
     coordinator.close(config.exchange, symbol, config.id);
   },
+  onTrendCandle: (symbol, exchange) => evaluate(exchange, symbol),
 }));
 
 async function bootstrap(): Promise<void> {
@@ -122,16 +166,16 @@ async function bootstrap(): Promise<void> {
   startHealthServer(env.PORT + 1, () => metrics.latest);
   setInterval(refreshControl, 2_000).unref();
   setInterval(refreshMetrics, 300_000).unref();
-  setInterval(() => void Promise.all(symbols.map(async (symbol) => {
+  setInterval(() => void Promise.all([...new Set([...contexts.values()].map((context) => context.symbol))].map(async (symbol) => {
     await trainer.train(symbol);
-    await contexts.get(symbol)?.ml.initialize();
+    await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
   })), 3_600_000).unref();
-  websocket.on("kline", (candle) => {
-    if (candle.timeframe === "15" && candle.confirmed) void evaluate(candle.symbol);
-  });
+  setInterval(() => void Promise.all(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol))), 60_000).unref();
   websocket.on("fatal_disconnect", () => {
     status = "ERROR";
-    for (const context of contexts.values()) context.circuitBreaker.trip("Bybit WebSocket disconnected");
+    for (const context of contexts.values()) {
+      if (context.exchange === "bybit") context.circuitBreaker.trip("Bybit WebSocket disconnected");
+    }
     void discord.alert("Bybit WebSocket disconnected after five retries. Engine halted.");
   });
   log.info({ paperTrading: bybitPaper, symbols, strategies: activeDescriptors.map((item) => item.id) }, "engine started");
@@ -143,6 +187,9 @@ function subscribeStrategies(): void {
   }
   for (const symbol of new Set(activeDescriptors.filter((item) => item.exchange === "binance" && item.symbol !== "MULTI").map((item) => item.symbol))) {
     binanceAdapter.subscribeCandles(symbol, ["1", "3", "15", "60", "240"], (candle) => void dispatchStrategyCandle("binance", candle));
+    binanceAdapter.subscribeTicker(symbol, (price, fundingRate) => {
+      binanceStore.setTicker({ symbol, price, fundingRate, openInterest: 0, timestamp: Date.now() });
+    });
   }
   binanceWebsocket.on("fatal", () => {
     log.error("Binance WebSocket reconnect exhausted");
@@ -153,7 +200,7 @@ function subscribeStrategies(): void {
 async function dispatchStrategyCandle(exchange: "bybit" | "binance", candle: Parameters<typeof bybitAdapter.subscribeCandles>[2] extends (value: infer T) => void ? T : never): Promise<void> {
   if (!candle.confirmed) return;
   if (exchange === "binance") {
-    store.addCandle({
+    binanceStore.addCandle({
       symbol: candle.symbol,
       timeframe: candle.interval,
       openTime: candle.openTime,
@@ -191,6 +238,7 @@ async function restoreCoordinator(): Promise<void> {
       direction: trade.direction as Direction,
       sizeUsdt: trade.positionSizeUsdt,
     });
+    if ((descriptor?.type ?? "TREND") === "TREND") void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId);
   }
   for (const descriptor of descriptors.filter((item) => item.type === "GRID")) {
     const exposure = gridLevels.filter((level) => level.strategyId === descriptor.id).reduce((sum, level) => sum + level.orderSizeUsdt, 0);
@@ -207,27 +255,51 @@ async function restoreCoordinator(): Promise<void> {
 }
 
 async function warmMarketData(): Promise<void> {
-  for (const symbol of symbols) {
+  for (const context of contexts.values()) {
     try {
       for (const timeframe of ["1", "3", "15", "60", "240"]) {
-        const candles = await client.getKlines(symbol, timeframe, 200);
-        for (const candle of candles) store.addCandle(candle);
+        const candles = await context.adapter.getHistoricalCandles(context.symbol, timeframe, 200);
+        for (const candle of candles) {
+          context.store.addCandle({
+            symbol: candle.symbol,
+            timeframe: candle.interval,
+            openTime: candle.openTime,
+            closeTime: candle.closeTime,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+            confirmed: candle.confirmed,
+          });
+        }
       }
-      log.info({ symbol }, "historical market data warmed");
+      const [book, fundingRate] = await Promise.all([
+        context.adapter.getBestBidAsk(context.symbol),
+        context.adapter.getFundingRate(context.symbol),
+      ]);
+      context.store.setTicker({
+        symbol: context.symbol,
+        price: (book.bid + book.ask) / 2,
+        fundingRate,
+        openInterest: 0,
+        timestamp: Date.now(),
+      });
+      log.info({ exchange: context.exchange, symbol: context.symbol }, "historical market data warmed");
     } catch (error) {
-      log.warn({ symbol, error }, "market-data warmup failed; WebSocket accumulation will continue");
+      log.warn({ exchange: context.exchange, symbol: context.symbol, error }, "market-data warmup failed; WebSocket accumulation will continue");
     }
   }
 }
 
-async function evaluate(symbol: string): Promise<void> {
-  const trendDescriptor = activeDescriptors.find((item) => item.type === "TREND" && item.exchange === "bybit" && item.symbol === symbol);
-  if (!trendDescriptor || processing.has(symbol) || status !== "RUNNING" || !registry.list().find((item) => item.symbol === symbol)?.enabled) return;
-  const context = contexts.get(symbol);
-  if (!context) return;
-  processing.add(symbol);
+async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
+  const trendDescriptor = activeDescriptors.find((item) => item.type === "TREND" && item.exchange === exchange && item.symbol === symbol);
+  const key = contextKey(exchange, symbol);
+  if (!trendDescriptor || processing.has(key) || status !== "RUNNING") return;
+  const context = getOrCreateContext(exchange, symbol);
+  processing.add(key);
   try {
-    const h4 = store.getCandles(symbol, "240");
+    const h4 = context.store.getCandles(symbol, "240");
     if (h4.length >= 80) {
       const atrSeries = atr(h4);
       const atrValue = atrSeries.at(-1) ?? 0;
@@ -235,8 +307,8 @@ async function evaluate(symbol: string): Promise<void> {
       const averageAtr = recentAtr.length ? recentAtr.reduce((sum, value) => sum + value, 0) / recentAtr.length : atrValue;
       const adxValue = adx(h4).at(-1) ?? 0;
       let equity = 10_000;
-      if (!bybitPaper) {
-        try { equity = await client.getWalletEquity(); } catch (error) { log.warn({ symbol, error }, "wallet equity unavailable for adaptive update"); }
+      if (!context.adapter.paperTrading) {
+        try { equity = await context.adapter.getWalletBalance(); } catch (error) { log.warn({ exchange, symbol, error }, "wallet equity unavailable for adaptive update"); }
       }
       const history = await prisma.dailyMetrics.findMany({ orderBy: { date: "desc" }, take: 30, select: { equityEnd: true } });
       const peak = Math.max(equity, ...history.map((item) => item.equityEnd));
@@ -253,18 +325,19 @@ async function evaluate(symbol: string): Promise<void> {
       return;
     }
     const strategyId = trendDescriptor.id;
-    const conflictDecision = coordinator.check("bybit", symbol, "TREND", signal.direction, decision.positionSizeUsdt, strategyId);
+    const conflictDecision = coordinator.check(exchange, symbol, "TREND", signal.direction, decision.positionSizeUsdt, strategyId);
     if (!conflictDecision.approved) {
       await journal.record("RISK_REJECTED", { signal, decision: conflictDecision });
       return;
     }
-    const portfolioDecision = await portfolio.approve("bybit", symbol, decision.positionSizeUsdt);
+    const portfolioDecision = await portfolio.approve(exchange, symbol, decision.positionSizeUsdt);
     if (!portfolioDecision.approved) {
       await journal.record("RISK_REJECTED", { signal, decision: portfolioDecision });
       return;
     }
-    const tradeId = await orderManager.execute(symbol, signal, decision, "bybit", strategyId);
-    coordinator.open("bybit", symbol, { strategyId, type: "TREND", direction: signal.direction, sizeUsdt: decision.positionSizeUsdt });
+    const tradeId = await orderManager.execute(symbol, signal, decision, exchange, strategyId);
+    coordinator.open(exchange, symbol, { strategyId, type: "TREND", direction: signal.direction, sizeUsdt: decision.positionSizeUsdt });
+    void watchTradeClose(tradeId, exchange, symbol, strategyId);
     await Promise.all([
       telegram.tradeOpened(symbol, signal, decision.positionSizeUsdt, decision.leverage),
       discord.tradeOpened(symbol, signal, decision.positionSizeUsdt, decision.leverage),
@@ -276,8 +349,40 @@ async function evaluate(symbol: string): Promise<void> {
     await discord.alert(`Critical engine error: ${String(error).slice(0, 500)}`);
     log.error({ error }, "evaluation failed");
   } finally {
-    processing.delete(symbol);
+    processing.delete(key);
   }
+}
+
+async function watchTradeClose(tradeId: string, exchange: ExchangeId, symbol: string, strategyId: string): Promise<void> {
+  if (closeWatchers.has(tradeId)) return;
+  closeWatchers.add(tradeId);
+  const startedAt = Date.now();
+  const maxWaitMs = 7 * 24 * 60 * 60 * 1_000;
+  try {
+    while (Date.now() - startedAt < maxWaitMs) {
+      await delay(30_000);
+      try {
+        const trade = await prisma.trade.findUnique({ where: { id: tradeId }, select: { status: true } });
+        if (!trade || ["CLOSED", "CANCELLED", "ERROR"].includes(trade.status)) {
+          coordinator.close(exchange, symbol, strategyId);
+          return;
+        }
+      } catch (error) {
+        log.warn({ error, tradeId }, "watchTradeClose poll failed");
+      }
+    }
+    coordinator.close(exchange, symbol, strategyId);
+    log.warn({ tradeId, symbol }, "watchTradeClose timed out; coordinator forcibly cleared");
+  } finally {
+    closeWatchers.delete(tradeId);
+  }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, milliseconds);
+    timer.unref();
+  });
 }
 
 async function refreshControl(): Promise<void> {
@@ -294,7 +399,7 @@ async function refreshControl(): Promise<void> {
 }
 
 async function refreshMetrics(): Promise<void> {
-  const snapshots = [...contexts.entries()].map(([symbol, context]) => ({ symbol, ...context.adaptive.snapshot }));
+  const snapshots = [...contexts.values()].map((context) => ({ symbol: `${context.exchange}:${context.symbol}`, ...context.adaptive.snapshot }));
   const primary = snapshots[0];
   if (primary) await metrics.collect(status, primary.regime, primary.config, snapshots);
 }

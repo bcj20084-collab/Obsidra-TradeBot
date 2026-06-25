@@ -22,7 +22,7 @@ export class ScalpStrategy extends BaseStrategy {
     const hour = new Date(candle.openTime).getUTCHours();
     const hours = this.config.params.tradingHours as { start: number; end: number } | undefined;
     if (hours && (hour < hours.start || hour >= hours.end)) return;
-    const signal = this.signals.evaluate(this.config.symbol, this.dependencies.store);
+    const signal = this.signals.evaluate(this.config.symbol, this.dependencies.storeFor(this.config.exchange));
     if (!signal) return;
     this.processing = true;
     try {

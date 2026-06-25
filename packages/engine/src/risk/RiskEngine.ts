@@ -1,5 +1,5 @@
 import { prisma, type Direction, type SignalResult } from "@obsidra/shared";
-import type { BybitRestClient } from "../data/BybitRestClient.js";
+import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
 import type { AdaptiveParams } from "../signals/AdaptiveParams.js";
 import { DailyLossGuard } from "./DailyLossGuard.js";
 import { calculatePositionSize } from "./PositionSizer.js";
@@ -25,7 +25,7 @@ export class RiskEngine {
     private readonly maxDrawdownPct: number,
     private readonly maxPositionUsdt: number,
     private readonly preflight: PreFlightCheck,
-    private readonly client: BybitRestClient,
+    private readonly adapter: IExchangeAdapter,
     private readonly adaptive: AdaptiveParams,
   ) {
     this.dailyLossGuard = new DailyLossGuard(dailyLossLimit, weeklyLossLimit);
@@ -44,7 +44,7 @@ export class RiskEngine {
     });
     const daily = await this.dailyLossGuard.check();
     if (!daily.allowed) return reject(`Daily loss limit reached: ${daily.realizedPnl.toFixed(2)} USDT`);
-    const equity = await this.client.getWalletEquity();
+    const equity = await this.adapter.getWalletBalance();
     const metrics = await prisma.dailyMetrics.findMany({ orderBy: { date: "desc" }, take: 30 });
     const peak = Math.max(equity, ...metrics.map((item) => item.equityEnd));
     const drawdown = peak > 0 ? ((peak - equity) / peak) * 100 : 0;
@@ -52,7 +52,7 @@ export class RiskEngine {
     const preflight = await this.preflight.run(symbol);
     if (!preflight.allowed) return reject(preflight.reason ?? "Pre-flight rejected");
     const trades = await prisma.trade.findMany({
-      where: { pnlUsdt: { not: null } },
+      where: { exchange: this.adapter.exchangeId, pnlUsdt: { not: null } },
       orderBy: { closedAt: "desc" },
       take: 50,
       select: { pnlUsdt: true },
