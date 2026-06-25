@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
 import { z } from "zod";
-import { moduleLogger } from "@obsidra/shared";
+import { moduleLogger, premiumLog } from "@obsidra/shared";
 import { normalizeKline } from "./DataNormalizer.js";
 import type { MarketDataStore, Orderbook, Ticker } from "./MarketDataStore.js";
 
@@ -64,6 +64,13 @@ export class BybitWebSocket extends EventEmitter<Events> {
       this.startHeartbeat();
       this.startStaleWatchdog();
       log.info({ url, topics: this.topics }, "connected");
+      premiumLog("market-data", "websocket_connected", {
+        exchange: "bybit",
+        environment: this.testnet ? "testnet" : "mainnet-or-demo",
+        topicCount: this.topics.length,
+        symbolCount: this.symbols.length,
+        symbols: this.symbols,
+      }, "info", "Bybit market-data stream connected");
     });
     this.socket.on("message", (raw) => this.handleMessage(raw.toString()));
     this.socket.on("pong", () => this.clearPongDeadline());

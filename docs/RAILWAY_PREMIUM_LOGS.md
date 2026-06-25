@@ -18,6 +18,11 @@ event:child_spawned
 event:api_started
 event:api_heartbeat
 event:websocket_connected
+event:engine_started
+event:engine_heartbeat
+event:market_data_warmed
+event:signal_evaluated
+event:signal_generated
 event:risk_approved
 event:risk_rejected
 event:order_intent_created
@@ -38,6 +43,33 @@ PREMIUM_LOG_HEARTBEAT_SECONDS=60
 ```
 
 Set it to `0` to disable the API heartbeat logs.
+
+For the trading-engine heartbeat:
+
+```text
+ENGINE_LOG_HEARTBEAT_SECONDS=60
+```
+
+Set it to `0` to disable it. Each heartbeat reports bot status, open positions,
+active strategies, current prices, funding rates, data age, candle-buffer sizes,
+market regime and circuit-breaker state.
+
+## Understanding signal logs
+
+Every completed 15-minute evaluation emits `signal_evaluated`. When no order is
+created, the `reason` field explains why:
+
+- `INSUFFICIENT_DATA`
+- `NO_TREND`
+- `CIRCUIT_BREAKER`
+- `INDICATORS_NOT_READY`
+- `VOLATILITY_TOO_HIGH`
+- `FUNDING_FILTER`
+- `SCORE_BELOW_THRESHOLD`
+- `RANGING_MARKET`
+
+When a candidate passes, Railway shows `SIGNAL_READY`, followed by
+`signal_generated`, risk approval/rejection and the order lifecycle.
 
 ## What the logs include
 

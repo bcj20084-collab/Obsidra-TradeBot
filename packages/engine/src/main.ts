@@ -1,4 +1,4 @@
-import { getEnv, moduleLogger, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
+import { getEnv, moduleLogger, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
 import { BybitRestClient } from "./data/BybitRestClient.js";
 import { BybitWebSocket } from "./data/BybitWebSocket.js";
 import { MarketDataStore } from "./data/MarketDataStore.js";
@@ -192,6 +192,10 @@ async function bootstrap(): Promise<void> {
   startHealthServer(env.PORT + 1, () => metrics.latest);
   setInterval(refreshControl, 2_000).unref();
   setInterval(refreshMetrics, 300_000).unref();
+  if (env.ENGINE_LOG_HEARTBEAT_SECONDS > 0) {
+    setInterval(() => void logEngineHeartbeat(), env.ENGINE_LOG_HEARTBEAT_SECONDS * 1_000).unref();
+    void logEngineHeartbeat();
+  }
   setInterval(() => void Promise.all([...new Set([...contexts.values()].map((context) => context.symbol))].map(async (symbol) => {
     await trainer.train(symbol);
     await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
@@ -210,6 +214,19 @@ async function bootstrap(): Promise<void> {
     symbols,
     strategies: activeDescriptors.map((item) => item.id),
   }, "engine started");
+  premiumLog("engine", "engine_started", {
+    status,
+    bybitEnvironment: env.BYBIT_DEMO ? "demo" : env.BYBIT_TESTNET ? "testnet" : "mainnet",
+    executionMode: bybitPaper ? "PAPER" : env.BYBIT_DEMO ? "DEMO" : "LIVE",
+    symbols,
+    strategies: activeDescriptors.map((item) => ({
+      id: item.id,
+      type: item.type,
+      exchange: item.exchange,
+      symbol: item.symbol,
+      mode: item.isPaperTrading ? "PAPER" : item.exchange === "bybit" && env.BYBIT_DEMO ? "DEMO" : "LIVE",
+    })),
+  }, "info", "Obsidra engine started");
 }
 
 function subscribeStrategies(): void {
@@ -317,6 +334,12 @@ async function warmMarketData(): Promise<void> {
         timestamp: Date.now(),
       });
       log.info({ exchange: context.exchange, symbol: context.symbol }, "historical market data warmed");
+      premiumLog("market-data", "market_data_warmed", {
+        exchange: context.exchange,
+        symbol: context.symbol,
+        timeframes: ["1", "3", "15", "60", "240"],
+        tickerPrice: context.store.getTicker(context.symbol)?.price ?? null,
+      }, "info", `Market data ready for ${context.exchange}:${context.symbol}`);
     } catch (error) {
       log.warn({ exchange: context.exchange, symbol: context.symbol, error }, "market-data warmup failed; WebSocket accumulation will continue");
     }
@@ -346,13 +369,36 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
       const drawdown = peak > 0 ? ((peak - equity) / peak) * 100 : 0;
       await context.adaptive.update(atrValue, averageAtr, adxValue, drawdown);
     }
-    const signal = await context.signals.evaluate(symbol);
+    const evaluation = await context.signals.evaluateDetailed(symbol);
+    premiumLog("signals", "signal_evaluated", {
+      exchange,
+      symbol,
+      outcome: evaluation.signal ? "READY" : "SKIPPED",
+      reason: evaluation.reason,
+      ...evaluation.details,
+    }, evaluation.signal ? "info" : "info", evaluation.signal
+      ? `Trade signal ready: ${symbol} ${evaluation.signal.direction} score ${evaluation.signal.score}`
+      : `No trade for ${symbol}: ${evaluation.reason}`);
+    const signal = evaluation.signal;
     if (!signal) return;
     await journal.record("SIGNAL_GENERATED", { signal });
+    premiumLog("signals", "signal_generated", {
+      exchange,
+      symbol,
+      direction: signal.direction,
+      score: signal.score,
+      confidence: signal.confidence,
+      regime: signal.regime,
+      entryPrice: signal.entryPrice,
+      stopLoss: signal.stopLoss,
+      takeProfit: signal.takeProfit,
+      indicators: signal.indicators,
+      mlAdjustment: signal.mlAdjustment,
+    }, "info", `Signal generated: ${symbol} ${signal.direction}`);
     const decision = await context.risk.approve(symbol, signal);
     await journal.record(decision.approved ? "RISK_APPROVED" : "RISK_REJECTED", { signal, decision });
     if (!decision.approved) {
-      log.info({ reason: decision.reason }, "signal rejected");
+      log.info({ exchange, symbol, reason: decision.reason }, "signal rejected");
       return;
     }
     const strategyId = trendDescriptor.id;
@@ -381,6 +427,39 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     log.error({ error }, "evaluation failed");
   } finally {
     processing.delete(key);
+  }
+}
+
+async function logEngineHeartbeat(): Promise<void> {
+  try {
+    const openPositionsCount = await prisma.trade.count({
+      where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+    });
+    const marketData = [...contexts.values()].map((context) => {
+      const ticker = context.store.getTicker(context.symbol);
+      const latestCandle = context.store.getCandles(context.symbol, "15", 1)[0];
+      return {
+        exchange: context.exchange,
+        symbol: context.symbol,
+        price: ticker?.price ?? null,
+        fundingRate: ticker?.fundingRate ?? null,
+        tickerAgeSeconds: ticker ? Math.round((Date.now() - ticker.timestamp) / 1_000) : null,
+        last15mCandleAt: latestCandle ? new Date(latestCandle.closeTime).toISOString() : null,
+        h4Candles: context.store.getCandles(context.symbol, "240").length,
+        m15Candles: context.store.getCandles(context.symbol, "15").length,
+        regime: context.adaptive.snapshot.regime,
+        circuitBreaker: context.circuitBreaker.state.active,
+      };
+    });
+    premiumLog("engine", "engine_heartbeat", {
+      status,
+      processingSymbols: [...processing],
+      openPositionsCount,
+      activeStrategyCount: strategies.length,
+      marketData,
+    }, "info", `Bot heartbeat: ${status}, ${openPositionsCount} open position(s)`);
+  } catch (error) {
+    premiumLog("engine", "engine_heartbeat_failed", { error }, "warn", "Bot heartbeat collection failed");
   }
 }
 
