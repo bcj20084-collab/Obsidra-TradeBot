@@ -21,6 +21,38 @@ const RETRYABLE_CODES = new Set([10006, 10016]);
 const FATAL_CODES = new Set([10003, 10004, 110007, 110014, 110025]);
 const WARN_CODES = new Set([110017]);
 
+interface BybitEnvelope<T> {
+  retCode: number;
+  retMsg: string;
+  result: T;
+}
+
+export function parseBybitEnvelope<T>(
+  response: Pick<Response, "ok" | "status" | "headers">,
+  responseText: string,
+  method: string,
+  path: string,
+): BybitEnvelope<T> {
+  const contentType = response.headers.get("content-type") ?? "unknown";
+  if (!responseText.trim()) {
+    throw new AppError(
+      response.status === 401 || response.status === 403 ? ErrorCode.EXCHANGE_PERMANENT : ErrorCode.EXCHANGE_TEMPORARY,
+      `Bybit returned an empty response (HTTP ${response.status})`,
+      { method, path, httpStatus: response.status, contentType, responseBytes: 0 },
+    );
+  }
+  try {
+    return JSON.parse(responseText) as BybitEnvelope<T>;
+  } catch (error) {
+    throw new AppError(
+      response.ok ? ErrorCode.EXCHANGE_TEMPORARY : ErrorCode.EXCHANGE_PERMANENT,
+      `Bybit returned a non-JSON response (HTTP ${response.status}, ${contentType})`,
+      { method, path, httpStatus: response.status, contentType, responseBytes: responseText.length },
+      { cause: error },
+    );
+  }
+}
+
 export class BybitRestClient {
   private readonly privateLimiter = new TokenBucket(10, 10);
   private readonly publicLimiter = new TokenBucket(50, 50);
@@ -188,35 +220,32 @@ export class BybitRestClient {
     payload: Record<string, unknown>,
   ): Promise<T> {
     await this.privateLimiter.take();
-    const timestamp = Date.now().toString();
     const receiveWindow = "5000";
     const body = method === "POST" ? JSON.stringify(payload) : new URLSearchParams(payload as Record<string, string>).toString();
-    const credentials = this.keys.withCredentials((apiKey, apiSecret) => ({
-      apiKey,
-      signature: createHmac("sha256", apiSecret)
-        .update(`${timestamp}${apiKey}${receiveWindow}${body}`)
-        .digest("hex"),
-    }));
     const url = method === "GET" ? `${this.baseUrl}${path}?${body}` : `${this.baseUrl}${path}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
+        const attemptTimestamp = Date.now().toString();
+        const attemptCredentials = this.keys.withCredentials((apiKey, apiSecret) => ({
+          apiKey,
+          signature: createHmac("sha256", apiSecret)
+            .update(`${attemptTimestamp}${apiKey}${receiveWindow}${body}`)
+            .digest("hex"),
+        }));
         const response = await fetch(url, {
           method,
           headers: {
             "Content-Type": "application/json",
-            "X-BAPI-API-KEY": credentials.apiKey,
-            "X-BAPI-SIGN": credentials.signature,
-            "X-BAPI-TIMESTAMP": timestamp,
+            "X-BAPI-API-KEY": attemptCredentials.apiKey,
+            "X-BAPI-SIGN": attemptCredentials.signature,
+            "X-BAPI-TIMESTAMP": attemptTimestamp,
             "X-BAPI-RECV-WINDOW": receiveWindow,
           },
           ...(method === "POST" ? { body } : {}),
         });
         this.lastHeartbeat = Date.now();
-        const json = (await response.json()) as {
-          retCode: number;
-          retMsg: string;
-          result: T;
-        };
+        const responseText = await response.text();
+        const json = parseBybitEnvelope<T>(response, responseText, method, path);
         if (response.status === 429 || [500, 502, 503, 504].includes(response.status) || RETRYABLE_CODES.has(json.retCode)) {
           throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg ?? `HTTP ${response.status}`, { retCode: json.retCode });
         }
@@ -238,7 +267,15 @@ export class BybitRestClient {
           throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, errorMessage(error), {}, { cause: error });
         }
         const delay = 1_000 * 2 ** attempt;
-        log.warn({ attempt, delay, error }, "temporary Bybit error");
+        log.warn({
+          attempt,
+          delay,
+          method,
+          path,
+          error,
+          errorCode: error instanceof AppError ? error.code : undefined,
+          errorContext: error instanceof AppError ? error.context : undefined,
+        }, "temporary Bybit error");
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

@@ -17,6 +17,7 @@ function railwayContext() {
     environmentName: process.env.RAILWAY_ENVIRONMENT_NAME,
     projectId: process.env.RAILWAY_PROJECT_ID,
     publicDomain: process.env.RAILWAY_PUBLIC_DOMAIN,
+    replicaRegion: process.env.RAILWAY_REPLICA_REGION,
     serviceId: process.env.RAILWAY_SERVICE_ID,
     serviceName: process.env.RAILWAY_SERVICE_NAME,
     staticUrl: process.env.RAILWAY_STATIC_URL,
