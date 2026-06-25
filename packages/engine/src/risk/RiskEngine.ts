@@ -1,4 +1,4 @@
-import { prisma, type Direction, type SignalResult } from "@obsidra/shared";
+import { premiumLog, prisma, type Direction, type SignalResult } from "@obsidra/shared";
 import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
 import type { AdaptiveParams } from "../signals/AdaptiveParams.js";
 import { DailyLossGuard } from "./DailyLossGuard.js";
@@ -32,16 +32,28 @@ export class RiskEngine {
   }
 
   async approve(symbol: string, signal: SignalResult): Promise<RiskDecision> {
-    const reject = (reason: string): RiskDecision => ({
-      approved: false,
-      reason,
-      positionSizeUsdt: 0,
-      leverage: 1,
-      stopLossPrice: signal.stopLoss,
-      takeProfitPrice: signal.takeProfit,
-      trailingStopPct: this.adaptive.snapshot.config.trailingStopPct,
-      riskRewardRatio: 0,
-    });
+    const reject = (reason: string): RiskDecision => {
+      const decision = {
+        approved: false,
+        reason,
+        positionSizeUsdt: 0,
+        leverage: 1,
+        stopLossPrice: signal.stopLoss,
+        takeProfitPrice: signal.takeProfit,
+        trailingStopPct: this.adaptive.snapshot.config.trailingStopPct,
+        riskRewardRatio: 0,
+      };
+      premiumLog("risk", "risk_rejected", {
+        symbol,
+        exchange: this.adapter.exchangeId,
+        direction: signal.direction,
+        score: signal.score,
+        confidence: signal.confidence,
+        regime: signal.regime,
+        reason,
+      }, "info", "premium risk rejected");
+      return decision;
+    };
     const daily = await this.dailyLossGuard.check();
     if (!daily.allowed) return reject(`Daily loss limit reached: ${daily.realizedPnl.toFixed(2)} USDT`);
     const equity = await this.adapter.getWalletBalance();
@@ -67,7 +79,7 @@ export class RiskEngine {
     const rewardDistance = Math.abs(signal.takeProfit - signal.entryPrice);
     const riskRewardRatio = rewardDistance / Math.max(riskDistance, Number.EPSILON);
     if (riskRewardRatio < 1.5) return reject(`Risk/reward ${riskRewardRatio.toFixed(2)} is below 1.5`);
-    return {
+    const decision = {
       approved: true,
       positionSizeUsdt,
       leverage,
@@ -76,6 +88,20 @@ export class RiskEngine {
       trailingStopPct: config.trailingStopPct,
       riskRewardRatio,
     };
+    premiumLog("risk", "risk_approved", {
+      symbol,
+      exchange: this.adapter.exchangeId,
+      direction: signal.direction,
+      score: signal.score,
+      confidence: signal.confidence,
+      regime: signal.regime,
+      equity,
+      drawdownPct: drawdown,
+      positionSizeUsdt,
+      leverage,
+      riskRewardRatio,
+    }, "info", "premium risk approved");
+    return decision;
   }
 }
 
