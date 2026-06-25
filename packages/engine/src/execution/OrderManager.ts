@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { premiumLog, prisma, type SignalResult } from "@obsidra/shared";
+import { operatorLog, premiumLog, prisma, type SignalResult } from "@obsidra/shared";
 import type { ExchangeId } from "../exchanges/IExchangeAdapter.js";
 import type { ExchangeRouter } from "../exchanges/ExchangeRouter.js";
 import type { RiskDecision } from "../risk/RiskEngine.js";
@@ -7,6 +7,7 @@ import { sideFor } from "../risk/RiskEngine.js";
 import type { ExecutionJournal } from "./ExecutionJournal.js";
 import type { OrderStateMachine } from "./OrderStateMachine.js";
 import { calculateOrderQuantity } from "./ExecutionMath.js";
+import type { ClosedTradeNotification } from "../monitoring/TelegramNotifier.js";
 
 function serializeError(error: unknown): unknown {
   if (error instanceof Error) return { name: error.name, message: error.message, stack: error.stack };
@@ -18,6 +19,7 @@ export class OrderManager {
     private readonly exchanges: ExchangeRouter,
     private readonly stateMachine: OrderStateMachine,
     private readonly journal: ExecutionJournal,
+    private readonly onTradeClosed?: (trade: ClosedTradeNotification) => Promise<void>,
   ) {}
 
   async execute(symbol: string, signal: SignalResult, risk: RiskDecision, exchange: ExchangeId = "bybit", strategyId = "trend"): Promise<string> {
@@ -110,6 +112,11 @@ export class OrderManager {
         feeUsdt: result.feeUsdt,
         quantity,
       }, "info", "premium order opened");
+      operatorLog(
+        "INFO",
+        `🟢 ${signal.direction === "LONG" ? "BUY" : "SELL"} | ${symbol}`,
+        `Entry: $${(result.avgFillPrice || signal.entryPrice).toFixed(4)} | SL: $${risk.stopLossPrice.toFixed(4)} | TP: $${risk.takeProfitPrice.toFixed(4)} | Size: ${risk.positionSizeUsdt.toFixed(2)} USDT | ${risk.leverage}x`,
+      );
       return trade.id;
     } catch (error) {
       await this.stateMachine.transition(trade.id, "ERROR", "Order placement failed", { error: String(error) });
@@ -170,13 +177,17 @@ export class OrderManager {
         ? (exitPrice - trade.entryPrice) * quantity
         : (trade.entryPrice - exitPrice) * quantity;
       const pnlUsdt = grossPnl - (trade.feeUsdt ?? 0) - result.feeUsdt;
+      const pnlPct = (pnlUsdt / Math.max(trade.positionSizeUsdt, Number.EPSILON)) * 100;
+      const holdTimeSeconds = trade.openedAt ? Math.max(0, Math.round((Date.now() - trade.openedAt.getTime()) / 1_000)) : 0;
       await prisma.trade.update({
         where: { id: trade.id },
         data: {
           exitPrice,
           pnlUsdt,
+          pnlPct,
           feeUsdt: (trade.feeUsdt ?? 0) + result.feeUsdt,
           closeReason: reason,
+          holdTimeSeconds,
           closedAt: new Date(),
         },
       });
@@ -194,6 +205,21 @@ export class OrderManager {
         quantity,
         reason,
       }, "info", "premium order closed");
+      operatorLog(
+        pnlUsdt >= 0 ? "INFO" : "WARNING",
+        `${pnlUsdt >= 0 ? "✅ TAKE PROFIT" : "❌ CLOSE"} | ${trade.symbol}`,
+        `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%) | Reason: ${reason}`,
+      );
+      await this.onTradeClosed?.({
+        symbol: trade.symbol,
+        direction: trade.direction,
+        entryPrice: trade.entryPrice,
+        exitPrice,
+        pnlUsdt,
+        pnlPct,
+        reason,
+        holdTimeMinutes: holdTimeSeconds / 60,
+      });
     } catch (error) {
       await this.stateMachine.transition(trade.id, "ERROR", "Close order failed", { error: String(error) });
       premiumLog("execution", "close_order_failed", {

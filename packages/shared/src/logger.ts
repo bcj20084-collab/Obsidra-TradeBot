@@ -22,6 +22,7 @@ const pinoLogMethods = new Set(["fatal", "error", "warn", "info", "debug", "trac
 
 export type PremiumLogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 export type PremiumLogContext = Record<string, unknown>;
+export type OperatorLogLevel = "INFO" | "WARNING" | "ERROR";
 
 function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -41,6 +42,36 @@ function redact(value: unknown, key = ""): unknown {
   }
   if (typeof value === "string" && /^[A-Za-z0-9+/=_-]{32,}$/.test(value)) return "[REDACTED]";
   return value;
+}
+
+function cleanOperatorText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function formatOperatorLine(level: OperatorLogLevel, label: string, details = ""): string {
+  const timestamp = new Date().toISOString().replace("T", " ").replace("Z", "");
+  const safeLabel = cleanOperatorText(label);
+  const safeDetails = cleanOperatorText(details);
+  return `${timestamp} | ${level.padEnd(7)} | ${safeLabel}${safeDetails ? ` | ${safeDetails}` : ""}`;
+}
+
+export function operatorLog(level: OperatorLogLevel, label: string, details = ""): void {
+  const stream = level === "ERROR" ? process.stderr : process.stdout;
+  stream.write(`${formatOperatorLine(level, label, details)}\n`);
+}
+
+export function operatorBlock(title: string, rows: Array<[string, unknown]>): void {
+  const separator = "=".repeat(72);
+  const lines = [
+    separator,
+    formatOperatorLine("INFO", title),
+    ...rows.map(([label, value]) => `${cleanOperatorText(label).padEnd(22)} | ${cleanOperatorText(value)}`),
+    separator,
+  ];
+  process.stdout.write(`${lines.join("\n")}\n`);
 }
 
 function compactStrings(entries: Record<string, string | undefined>): Record<string, string> {

@@ -1,4 +1,4 @@
-import { premiumLog, prisma, type Direction, type SignalResult } from "@obsidra/shared";
+import { operatorLog, premiumLog, prisma, type Direction, type SignalResult } from "@obsidra/shared";
 import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
 import type { AdaptiveParams } from "../signals/AdaptiveParams.js";
 import { DailyLossGuard } from "./DailyLossGuard.js";
@@ -55,6 +55,7 @@ export class RiskEngine {
         regime: signal.regime,
         reason,
       }, "info", "premium risk rejected");
+      operatorLog("WARNING", `🛡️ RISK REJECTED | ${symbol}`, reason);
       return decision;
     };
     const daily = await this.dailyLossGuard.check();
@@ -119,6 +120,11 @@ export class RiskEngine {
       leverage,
       riskRewardRatio,
     }, "info", "premium risk approved");
+    operatorLog(
+      "INFO",
+      `🛡️ RISK APPROVED | ${symbol}`,
+      `Size: ${positionSizeUsdt.toFixed(2)} USDT | Leverage: ${leverage}x | R:R ${riskRewardRatio.toFixed(2)}`,
+    );
     return decision;
   }
 }

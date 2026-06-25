@@ -82,3 +82,25 @@ When a candidate passes, Railway shows `SIGNAL_READY`, followed by
 - Health server status.
 
 Sensitive values are redacted by the shared logger before writing logs.
+
+## Human-readable operator feed
+
+Alongside JSON events, Railway receives a compact feed designed for live monitoring:
+
+```text
+2026-06-26 09:40:31.931 | INFO    | 🎯 SIGNAL | BTCUSDT | LONG | Confidence: 71.0%
+2026-06-26 09:40:32.500 | INFO    | 🟢 BUY | BTCUSDT | Entry: $60500.00 | SL: $59800.00 | TP: $61700.00
+2026-06-26 10:12:04.100 | INFO    | ✅ TAKE PROFIT | BTCUSDT | PnL: +12.40 USDT (+2.48%)
+```
+
+The periodic `STATUS` block shows realized PnL, win rate, drawdown, active trades,
+current prices and estimated unrealized PnL.
+
+Telegram sends matching formatted messages for startup, entries, exchange-triggered
+TP/SL closes and periodic status. Configure the status interval with:
+
+```text
+TELEGRAM_STATUS_INTERVAL_MINUTES=30
+```
+
+Set it to `0` to disable periodic Telegram status messages.

@@ -1,4 +1,4 @@
-import { getEnv, moduleLogger, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
+import { getEnv, moduleLogger, operatorBlock, operatorLog, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
 import { BybitRestClient } from "./data/BybitRestClient.js";
 import { BybitWebSocket } from "./data/BybitWebSocket.js";
 import { MarketDataStore } from "./data/MarketDataStore.js";
@@ -62,10 +62,16 @@ const binanceRest = new BinanceRestClient(
 const binanceWebsocket = new BinanceWebSocket(env.BINANCE_TESTNET);
 const binanceAdapter = new BinanceAdapter(binanceRest, binanceWebsocket);
 const exchanges = new ExchangeRouter([bybitAdapter, binanceAdapter]);
+const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID);
+const discord = new DiscordNotifier(env.DISCORD_WEBHOOK_TRADES, env.DISCORD_WEBHOOK_ALERTS, env.DISCORD_WEBHOOK_DAILY);
 const journal = new ExecutionJournal();
 const stateMachine = new OrderStateMachine(journal);
-const orderManager = new OrderManager(exchanges, stateMachine, journal);
-const reconciliation = new ReconciliationService([bybitAdapter, binanceAdapter], journal);
+const orderManager = new OrderManager(exchanges, stateMachine, journal, (trade) => telegram.tradeClosed(trade));
+const reconciliation = new ReconciliationService(
+  [bybitAdapter, binanceAdapter],
+  journal,
+  (trade) => telegram.tradeClosed(trade),
+);
 const metrics = new MetricsCollector();
 const trainer = new MLTrainer();
 const portfolio = new PortfolioRiskEngine({
@@ -77,8 +83,6 @@ const portfolio = new PortfolioRiskEngine({
   maxPositions: env.MAX_OPEN_POSITIONS_TOTAL,
 });
 const coordinator = new StrategyCoordinator(env.ALLOW_SAME_SYMBOL_HEDGE, env.PORTFOLIO_MAX_USDT_PER_SYMBOL);
-const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID);
-const discord = new DiscordNotifier(env.DISCORD_WEBHOOK_TRADES, env.DISCORD_WEBHOOK_ALERTS, env.DISCORD_WEBHOOK_DAILY);
 let status: BotStatus = "RUNNING";
 const processing = new Set<string>();
 const closeWatchers = new Set<string>();
@@ -196,6 +200,9 @@ async function bootstrap(): Promise<void> {
     setInterval(() => void logEngineHeartbeat(), env.ENGINE_LOG_HEARTBEAT_SECONDS * 1_000).unref();
     void logEngineHeartbeat();
   }
+  if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
+    setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
+  }
   setInterval(() => void Promise.all([...new Set([...contexts.values()].map((context) => context.symbol))].map(async (symbol) => {
     await trainer.train(symbol);
     await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
@@ -227,6 +234,22 @@ async function bootstrap(): Promise<void> {
       mode: item.isPaperTrading ? "PAPER" : item.exchange === "bybit" && env.BYBIT_DEMO ? "DEMO" : "LIVE",
     })),
   }, "info", "Obsidra engine started");
+  operatorBlock("🤖 OBSIDRA STARTED", [
+    ["Status", status],
+    ["Environment", env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"],
+    ["Symbols", symbols.join(", ")],
+    ["Strategies", activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"],
+    ["Telegram", telegram.configured ? "connected" : "disabled"],
+  ]);
+  if (telegram.configured) {
+    await telegram.send([
+      "🤖 <b>OBSIDRA STARTED</b>",
+      `Environment: <b>${env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"}</b>`,
+      `Symbols: <b>${symbols.join(", ")}</b>`,
+      `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
+      "Status: <b>RUNNING ✅</b>",
+    ].join("\n"));
+  }
 }
 
 function subscribeStrategies(): void {
@@ -379,6 +402,15 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     }, evaluation.signal ? "info" : "info", evaluation.signal
       ? `Trade signal ready: ${symbol} ${evaluation.signal.direction} score ${evaluation.signal.score}`
       : `No trade for ${symbol}: ${evaluation.reason}`);
+    operatorLog(
+      "INFO",
+      evaluation.signal
+        ? `🎯 SIGNAL | ${symbol} | ${evaluation.signal.direction}`
+        : `🔎 SCAN | ${symbol}`,
+      evaluation.signal
+        ? `Confidence: ${(evaluation.signal.confidence * 100).toFixed(1)}% | Entry: $${evaluation.signal.entryPrice.toFixed(4)} | Score: ${evaluation.signal.score}/100`
+        : `${evaluation.reason} | Price: ${String(evaluation.details.price ?? "n/a")} | Score: ${String(evaluation.details.score ?? "n/a")}`,
+    );
     const signal = evaluation.signal;
     if (!signal) return;
     await journal.record("SIGNAL_GENERATED", { signal });
@@ -432,7 +464,7 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
 
 async function logEngineHeartbeat(): Promise<void> {
   try {
-    const openPositionsCount = await prisma.trade.count({
+    const openTrades = await prisma.trade.findMany({
       where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
     });
     const marketData = [...contexts.values()].map((context) => {
@@ -454,12 +486,49 @@ async function logEngineHeartbeat(): Promise<void> {
     premiumLog("engine", "engine_heartbeat", {
       status,
       processingSymbols: [...processing],
-      openPositionsCount,
+      openPositionsCount: openTrades.length,
       activeStrategyCount: strategies.length,
       marketData,
-    }, "info", `Bot heartbeat: ${status}, ${openPositionsCount} open position(s)`);
+    }, "info", `Bot heartbeat: ${status}, ${openTrades.length} open position(s)`);
+    const currentMetrics = metrics.latest;
+    const tradeRows: Array<[string, unknown]> = openTrades.map((trade) => {
+      const ticker = contexts.get(contextKey(trade.exchange as ExchangeId, trade.symbol))?.store.getTicker(trade.symbol);
+      const currentPrice = ticker?.price ?? trade.entryPrice ?? 0;
+      const quantity = trade.entryPrice
+        ? (trade.positionSizeUsdt * trade.leverage) / trade.entryPrice
+        : 0;
+      const unrealized = trade.entryPrice
+        ? (trade.direction === "LONG" ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice) * quantity
+        : 0;
+      return [
+        `📌 ${trade.symbol}`,
+        `Entry: $${(trade.entryPrice ?? 0).toFixed(4)} | Now: $${currentPrice.toFixed(4)} | PnL: ${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(2)} USDT`,
+      ];
+    });
+    operatorBlock(`📊 STATUS | ${new Date().toISOString()}`, [
+      ["🤖 Bot", status],
+      ["💰 Realized PnL", `${(currentMetrics?.totalPnlUsdt ?? 0).toFixed(2)} USDT`],
+      ["📈 Win Rate", `${(currentMetrics?.winRate ?? 0).toFixed(1)}%`],
+      ["📉 Drawdown", `${(currentMetrics?.currentDrawdown ?? 0).toFixed(2)}%`],
+      ["🎯 Signals 24h", currentMetrics?.signalsGenerated24h ?? 0],
+      ["📌 Active Trades", openTrades.length],
+      ...tradeRows,
+      ["⏳ Next scan", "waiting for confirmed 15m candle"],
+    ]);
   } catch (error) {
     premiumLog("engine", "engine_heartbeat_failed", { error }, "warn", "Bot heartbeat collection failed");
+  }
+}
+
+async function sendTelegramStatus(): Promise<void> {
+  try {
+    const snapshots = [...contexts.values()].map((context) => ({ symbol: `${context.exchange}:${context.symbol}`, ...context.adaptive.snapshot }));
+    const primary = snapshots[0];
+    if (!primary) return;
+    const snapshot = await metrics.collect(status, primary.regime, primary.config, snapshots);
+    await telegram.status(snapshot);
+  } catch (error) {
+    log.warn({ error }, "Telegram status notification failed");
   }
 }
 

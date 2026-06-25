@@ -1,6 +1,7 @@
-import { prisma, moduleLogger } from "@obsidra/shared";
+import { operatorLog, prisma, moduleLogger } from "@obsidra/shared";
 import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
 import type { ExecutionJournal } from "./ExecutionJournal.js";
+import type { ClosedTradeNotification } from "../monitoring/TelegramNotifier.js";
 
 const log = moduleLogger("ReconciliationService");
 
@@ -8,6 +9,7 @@ export class ReconciliationService {
   constructor(
     private readonly adapters: IExchangeAdapter[],
     private readonly journal: ExecutionJournal,
+    private readonly onTradeClosed?: (trade: ClosedTradeNotification) => Promise<void>,
   ) {}
 
   async reconcile(symbol: string): Promise<void> {
@@ -21,8 +23,56 @@ export class ReconciliationService {
         const expectedSide = trade.direction === "LONG" ? "Long" : "Short";
         const match = activeExchange.some((position) => position.symbol === trade.symbol && position.side === expectedSide);
         if (!match) {
-          await prisma.trade.update({ where: { id: trade.id }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "RECONCILIATION" } });
-          await this.journal.record("RECONCILIATION_LOCAL_CLOSED", { exchange: adapter.exchangeId, reason: "Missing on exchange" }, trade.id);
+          const closed = await adapter.getLatestClosedPosition?.(trade.symbol).catch(() => null);
+          const belongsToTrade = closed
+            && closed.side === expectedSide
+            && (!trade.openedAt || closed.closedAt >= trade.openedAt.getTime());
+          const exitPrice = belongsToTrade ? closed.exitPrice : trade.entryPrice ?? 0;
+          const pnlUsdt = belongsToTrade ? closed.pnlUsdt : null;
+          const pnlPct = pnlUsdt === null ? null : (pnlUsdt / Math.max(trade.positionSizeUsdt, Number.EPSILON)) * 100;
+          const distanceToTp = Math.abs(exitPrice - trade.takeProfit);
+          const distanceToSl = Math.abs(exitPrice - trade.stopLoss);
+          const closeReason = belongsToTrade
+            ? distanceToTp <= distanceToSl ? "TAKE_PROFIT" : "STOP_LOSS"
+            : "RECONCILIATION";
+          const closedAt = belongsToTrade ? new Date(closed.closedAt) : new Date();
+          const holdTimeSeconds = trade.openedAt ? Math.max(0, Math.round((closedAt.getTime() - trade.openedAt.getTime()) / 1_000)) : null;
+          await prisma.trade.update({
+            where: { id: trade.id },
+            data: {
+              status: "CLOSED",
+              closedAt,
+              closeReason,
+              exitPrice: exitPrice || null,
+              pnlUsdt,
+              pnlPct,
+              holdTimeSeconds,
+              ...(belongsToTrade ? { feeUsdt: closed.feeUsdt } : {}),
+            },
+          });
+          await this.journal.record("RECONCILIATION_LOCAL_CLOSED", {
+            exchange: adapter.exchangeId,
+            reason: "Missing on exchange",
+            closeReason,
+            pnlUsdt,
+          }, trade.id);
+          operatorLog(
+            pnlUsdt !== null && pnlUsdt >= 0 ? "INFO" : "WARNING",
+            `${closeReason === "TAKE_PROFIT" ? "🎯 TAKE PROFIT" : closeReason === "STOP_LOSS" ? "🛑 STOP LOSS" : "🔄 RECONCILED"} | ${trade.symbol}`,
+            `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt === null ? "unknown" : `${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT`}`,
+          );
+          if (belongsToTrade && trade.entryPrice && pnlUsdt !== null && pnlPct !== null) {
+            await this.onTradeClosed?.({
+              symbol: trade.symbol,
+              direction: trade.direction,
+              entryPrice: trade.entryPrice,
+              exitPrice,
+              pnlUsdt,
+              pnlPct,
+              reason: closeReason,
+              holdTimeMinutes: (holdTimeSeconds ?? 0) / 60,
+            });
+          }
         }
       }
       if (activeExchange.length > local.length) {

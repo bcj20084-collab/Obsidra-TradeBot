@@ -7,6 +7,31 @@ interface TelegramUpdate {
   message?: { text?: string; chat: { id: number } };
 }
 
+export interface ClosedTradeNotification {
+  symbol: string;
+  direction: string;
+  entryPrice: number;
+  exitPrice: number;
+  pnlUsdt: number;
+  pnlPct: number;
+  reason: string;
+  holdTimeMinutes: number;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function price(value: number): string {
+  if (value >= 1_000) return value.toFixed(2);
+  if (value >= 1) return value.toFixed(4);
+  return value.toFixed(6);
+}
+
+function signed(value: number, decimals = 2): string {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}`;
+}
+
 export class TelegramNotifier {
   private readonly apiUrl?: string;
   private lastSentAt = 0;
@@ -19,13 +44,22 @@ export class TelegramNotifier {
     }
   }
 
+  get configured(): boolean {
+    return Boolean(this.apiUrl);
+  }
+
   async send(message: string): Promise<void> {
     if (!this.apiUrl) return;
     const wait = Math.max(0, 3_000 - (Date.now() - this.lastSentAt));
     if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await this.request("sendMessage", { chat_id: this.chatId, text: message, parse_mode: "HTML" });
+        await this.request("sendMessage", {
+          chat_id: this.chatId,
+          text: message,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        });
         this.lastSentAt = Date.now();
         return;
       } catch (error) {
@@ -36,13 +70,61 @@ export class TelegramNotifier {
   }
 
   tradeOpened(symbol: string, signal: SignalResult, size: number, leverage: number): Promise<void> {
-    return this.send(
-      `✅ <b>Trade deschis</b>\n${symbol} ${signal.direction}\nEntry: ${signal.entryPrice}\nSL: ${signal.stopLoss}\nTP: ${signal.takeProfit}\nSize: ${size.toFixed(2)} USDT\nLeverage: ${leverage}x\nScor: ${signal.score}`,
-    );
+    const action = signal.direction === "LONG" ? "BUY" : "SELL";
+    const dot = signal.direction === "LONG" ? "🟢" : "🔴";
+    const stopPct = Math.abs((signal.stopLoss - signal.entryPrice) / signal.entryPrice) * 100;
+    const targetPct = Math.abs((signal.takeProfit - signal.entryPrice) / signal.entryPrice) * 100;
+    return this.send([
+      `${dot} <b>${action} | ${escapeHtml(symbol)}</b>`,
+      `Confidence: <b>${(signal.confidence * 100).toFixed(1)}%</b>`,
+      `Entry: <b>$${price(signal.entryPrice)}</b>`,
+      `HTF Trend: <b>${signal.direction === "LONG" ? "bullish 📈" : "bearish 📉"}</b>`,
+      `Market Regime: <b>${escapeHtml(signal.regime)}</b>`,
+      `Stop Loss: <b>$${price(signal.stopLoss)} (${stopPct.toFixed(2)}%)</b>`,
+      `Take Profit: <b>$${price(signal.takeProfit)} (${targetPct.toFixed(2)}%)</b>`,
+      `Position: <b>${size.toFixed(2)} USDT · ${leverage}x</b>`,
+      `Signal Score: <b>${signal.score}/100</b>`,
+    ].join("\n"));
+  }
+
+  tradeClosed(trade: ClosedTradeNotification): Promise<void> {
+    const profitable = trade.pnlUsdt >= 0;
+    return this.send([
+      `${profitable ? "✅" : "❌"} <b>CLOSE | ${escapeHtml(trade.symbol)}</b>`,
+      `Side: <b>${escapeHtml(trade.direction)}</b>`,
+      `Entry: <b>$${price(trade.entryPrice)}</b>`,
+      `Exit: <b>$${price(trade.exitPrice)}</b>`,
+      `PnL: <b>${signed(trade.pnlUsdt)} USDT (${signed(trade.pnlPct)}%)</b>`,
+      `Reason: <b>${escapeHtml(trade.reason)}</b>`,
+      `Duration: <b>${trade.holdTimeMinutes.toFixed(0)} min</b>`,
+    ].join("\n"));
+  }
+
+  async status(metrics: LiveMetrics): Promise<void> {
+    await this.send([
+      `📊 <b>OBSIDRA STATUS</b>`,
+      `Bot: <b>${escapeHtml(metrics.botStatus)}</b>`,
+      `Market: <b>${escapeHtml(metrics.marketRegime)}</b>`,
+      `Realized PnL: <b>${signed(metrics.totalPnlUsdt)} USDT</b>`,
+      `Trades: <b>${metrics.totalTrades}</b> · Win Rate: <b>${metrics.winRate.toFixed(1)}%</b>`,
+      `Open Positions: <b>${metrics.openPositionsCount ?? 0}</b>`,
+      `Exposure: <b>${(metrics.totalExposureUsdt ?? 0).toFixed(2)} USDT</b>`,
+      `Drawdown: <b>${metrics.currentDrawdown.toFixed(2)}%</b>`,
+      `Signals 24h: <b>${metrics.signalsGenerated24h}</b> · Rejected: <b>${metrics.signalsRejected24h}</b>`,
+      `Uptime: <b>${Math.floor(metrics.uptime / 60)} min</b>`,
+    ].join("\n"));
   }
 
   async daily(metrics: LiveMetrics): Promise<void> {
-    await this.send(`📊 <b>Raport zilnic</b>\nPnL: ${metrics.totalPnlUsdt.toFixed(2)} USDT\nTrades: ${metrics.totalTrades}\nWin rate: ${metrics.winRate.toFixed(1)}%\nDrawdown: ${metrics.currentDrawdown.toFixed(2)}%`);
+    await this.send([
+      `📈 <b>RAPORT ZILNIC OBSIDRA</b>`,
+      `PnL: <b>${signed(metrics.totalPnlUsdt)} USDT</b>`,
+      `Trades: <b>${metrics.totalTrades}</b>`,
+      `Win Rate: <b>${metrics.winRate.toFixed(1)}%</b>`,
+      `Profit Factor: <b>${metrics.profitFactor.toFixed(2)}</b>`,
+      `Fees: <b>${metrics.totalFeesPaidUsdt.toFixed(2)} USDT</b>`,
+      `Drawdown: <b>${metrics.currentDrawdown.toFixed(2)}%</b>`,
+    ].join("\n"));
   }
 
   private schedulePoll(delayMs: number): void {
@@ -75,7 +157,8 @@ export class TelegramNotifier {
     const command = message.text.trim().split(/\s+/, 1)[0]?.toLowerCase().replace(/@.+$/, "");
     if (command === "/status" || command === "/equity") {
       const state = await prisma.botState.findUnique({ where: { id: "singleton" } });
-      await this.send(`🤖 Status: ${state?.status ?? "STOPPED"}`);
+      const open = await prisma.trade.count({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
+      await this.send(`🤖 <b>OBSIDRA</b>\nStatus: <b>${state?.status ?? "STOPPED"}</b>\nOpen Positions: <b>${open}</b>`);
       return;
     }
     if (command === "/pause" || command === "/resume" || command === "/kill") {
@@ -86,15 +169,17 @@ export class TelegramNotifier {
           create: { id: "singleton", status, reason: `Telegram ${command}` },
           update: { status, reason: `Telegram ${command}` },
         });
-        await this.send(`✅ Comandă aplicată: ${status}`);
+        await this.send(`✅ Comandă aplicată: <b>${status}</b>`);
       } catch (error) {
-        await this.send(`🔴 Eroare: ${errorMessage(error)}`);
+        await this.send(`🔴 Eroare: ${escapeHtml(errorMessage(error))}`);
       }
       return;
     }
     if (command === "/trades") {
       const trades = await prisma.trade.findMany({ orderBy: { createdAt: "desc" }, take: 10 });
-      await this.send(trades.map((trade) => `${trade.symbol} ${trade.direction}: ${(trade.pnlUsdt ?? 0).toFixed(2)} USDT`).join("\n") || "Niciun trade.");
+      await this.send(trades.map((trade) =>
+        `${trade.pnlUsdt === null ? "📌" : trade.pnlUsdt >= 0 ? "✅" : "❌"} <b>${trade.symbol}</b> ${trade.direction}: ${signed(trade.pnlUsdt ?? 0)} USDT`,
+      ).join("\n") || "Niciun trade.");
     }
   }
 

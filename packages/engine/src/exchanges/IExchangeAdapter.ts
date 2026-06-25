@@ -36,6 +36,17 @@ export interface Position {
   markPrice: number; unrealizedPnl: number; leverage: number; liquidationPrice: number;
 }
 
+export interface ClosedPosition {
+  symbol: string;
+  side: "Long" | "Short";
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  pnlUsdt: number;
+  feeUsdt: number;
+  closedAt: number;
+}
+
 export interface IExchangeAdapter {
   readonly exchangeId: ExchangeId;
   readonly paperTrading: boolean;
@@ -45,6 +56,7 @@ export interface IExchangeAdapter {
   getHistoricalCandles(symbol: string, interval: string, limit: number): Promise<OHLCVCandle[]>;
   getWalletBalance(): Promise<number>;
   getOpenPositions(symbol?: string): Promise<Position[]>;
+  getLatestClosedPosition?(symbol: string): Promise<ClosedPosition | null>;
   getFundingRate(symbol: string): Promise<number>;
   placeOrder(params: OrderParams): Promise<OrderResult>;
   cancelOrder(symbol: string, orderId: string): Promise<void>;

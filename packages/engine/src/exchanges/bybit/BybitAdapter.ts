@@ -1,5 +1,5 @@
 import { moduleLogger } from "@obsidra/shared";
-import type { IExchangeAdapter, OHLCVCandle, OrderParams, OrderResult, Position } from "../IExchangeAdapter.js";
+import type { ClosedPosition, IExchangeAdapter, OHLCVCandle, OrderParams, OrderResult, Position } from "../IExchangeAdapter.js";
 import type { BybitRestClient } from "../../data/BybitRestClient.js";
 import type { BybitWebSocket } from "../../data/BybitWebSocket.js";
 import type { MarketDataStore } from "../../data/MarketDataStore.js";
@@ -45,6 +45,20 @@ export class BybitAdapter implements IExchangeAdapter {
       size: Number(p.size), entryPrice: Number(p.avgPrice), markPrice: Number(p.markPrice),
       unrealizedPnl: Number(p.unrealisedPnl), leverage: Number(p.leverage), liquidationPrice: Number(p.liqPrice),
     }));
+  }
+  async getLatestClosedPosition(symbol: string): Promise<ClosedPosition | null> {
+    const row = await this.rest.getLatestClosedPosition(symbol);
+    if (!row) return null;
+    return {
+      symbol: String(row.symbol ?? symbol),
+      side: row.side === "Buy" ? "Long" : "Short",
+      entryPrice: Number(row.avgEntryPrice ?? 0),
+      exitPrice: Number(row.avgExitPrice ?? 0),
+      qty: Number(row.qty ?? 0),
+      pnlUsdt: Number(row.closedPnl ?? 0),
+      feeUsdt: Number(row.openFee ?? 0) + Number(row.closeFee ?? 0),
+      closedAt: Number(row.updatedTime ?? row.createdTime ?? Date.now()),
+    };
   }
   getFundingRate(symbol: string) { return this.rest.getFundingRate(symbol); }
   async placeOrder(params: OrderParams): Promise<OrderResult> {

@@ -142,6 +142,16 @@ export class BybitRestClient {
     return result.list;
   }
 
+  async getLatestClosedPosition(symbol: string): Promise<Record<string, unknown> | null> {
+    if (this.paperTrading) return null;
+    const result = await this.privateRequest<{ list: Array<Record<string, unknown>> }>(
+      "GET",
+      "/v5/position/closed-pnl",
+      { category: "linear", symbol, limit: "1" },
+    );
+    return result.list[0] ?? null;
+  }
+
   async getOrderHistory(symbol: string, clientOrderId: string): Promise<{ avgPrice: number; filledQty: number; status: string; feeUsdt: number } | null> {
     if (this.paperTrading) return null;
     const result = await this.privateRequest<{ list: Array<Record<string, unknown>> }>(
