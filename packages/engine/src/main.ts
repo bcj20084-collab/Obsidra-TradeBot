@@ -1,4 +1,4 @@
-import { getEnv, moduleLogger, operatorBlock, operatorLog, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
+import { AppError, ErrorCode, getEnv, moduleLogger, operatorBlock, operatorLog, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
 import { BybitRestClient } from "./data/BybitRestClient.js";
 import { BybitWebSocket } from "./data/BybitWebSocket.js";
 import { MarketDataStore } from "./data/MarketDataStore.js";
@@ -175,23 +175,39 @@ const strategies = activeDescriptors.map((descriptor) => createStrategy({
 }));
 
 async function bootstrap(): Promise<void> {
+  let startupStage = "database_connect";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await prisma.$connect();
+  startupStage = "database_state";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await prisma.botState.upsert({
     where: { id: "singleton" },
     create: { id: "singleton", status },
     update: { status, reason: env.PAPER_TRADING ? "Paper trading startup" : "Live startup" },
   });
   await prisma.botEvent.create({ data: { type: "STARTED", message: `Engine started (${env.PAPER_TRADING ? "paper" : "live"})` } });
+  startupStage = "ml_initialize";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await Promise.all([...contexts.values()].map((context) => context.ml.initialize()));
   const reconciliationSymbols = [...new Set([
     ...symbols,
     ...activeDescriptors.filter((descriptor) => descriptor.symbol !== "MULTI").map((descriptor) => descriptor.symbol),
   ])];
-  await Promise.all(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol)));
+  startupStage = "exchange_reconciliation";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
+  await Promise.allSettled(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol)));
+  startupStage = "restore_state";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await restoreCoordinator();
+  startupStage = "start_strategies";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await Promise.all(strategies.map((strategy) => strategy.start()));
   subscribeStrategies();
+  startupStage = "market_data_warmup";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await warmMarketData();
+  startupStage = "websocket_connect";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   websocket.connect();
   startHealthServer(env.PORT + 1, () => metrics.latest);
   setInterval(refreshControl, 2_000).unref();
@@ -248,7 +264,7 @@ async function bootstrap(): Promise<void> {
       `Symbols: <b>${symbols.join(", ")}</b>`,
       `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
       "Status: <b>RUNNING ✅</b>",
-    ].join("\n"));
+    ].join("\n")).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
   }
 }
 
@@ -453,10 +469,17 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     ]);
     log.info({ tradeId }, "trade opened");
   } catch (error) {
-    status = "ERROR";
-    context.circuitBreaker.trip(String(error));
-    await discord.alert(`Critical engine error: ${String(error).slice(0, 500)}`);
-    log.error({ error }, "evaluation failed");
+    const exchangeError = error instanceof AppError
+      && [ErrorCode.EXCHANGE_TEMPORARY, ErrorCode.EXCHANGE_PERMANENT, ErrorCode.RATE_LIMITED].includes(error.code);
+    if (exchangeError) {
+      operatorLog("WARNING", `🔌 EXCHANGE ERROR | ${exchange}:${symbol}`, `${error.code}: ${error.message}; next candle will retry`);
+      log.warn({ error, exchange, symbol }, "evaluation skipped because exchange is unavailable");
+    } else {
+      status = "ERROR";
+      context.circuitBreaker.trip(String(error));
+      await discord.alert(`Critical engine error: ${String(error).slice(0, 500)}`);
+      log.error({ error }, "evaluation failed");
+    }
   } finally {
     processing.delete(key);
   }
@@ -603,6 +626,7 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 void bootstrap().catch((error) => {
+  premiumLog("engine", "engine_startup_failed", { error }, "fatal", "Engine startup failed");
   log.fatal({ error }, "startup failed");
   process.exit(1);
 });
