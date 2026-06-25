@@ -34,8 +34,13 @@ export class BybitRestClient {
     testnet: boolean,
     private readonly paperTrading: boolean,
     masterSecret = process.env.MASTER_SECRET ?? "development-only-master-secret-32",
+    demo = false,
   ) {
-    this.baseUrl = testnet ? "https://api-testnet.bybit.com" : "https://api.bybit.com";
+    this.baseUrl = demo
+      ? "https://api-demo.bybit.com"
+      : testnet
+        ? "https://api-testnet.bybit.com"
+        : "https://api.bybit.com";
     this.keys = new ApiKeyManager(apiKey, apiSecret, masterSecret);
   }
 

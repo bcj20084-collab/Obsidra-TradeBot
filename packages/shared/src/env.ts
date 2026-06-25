@@ -17,6 +17,7 @@ export const envSchema = z
     BYBIT_API_KEY_NEW: z.string().default(""),
     BYBIT_API_SECRET_NEW: z.string().default(""),
     BYBIT_TESTNET: boolString.default(true),
+    BYBIT_DEMO: boolString.default(false),
     BYBIT_MAX_EXPOSURE_USDT: z.coerce.number().positive().default(1000),
     BINANCE_API_KEY: z.string().default(""),
     BINANCE_API_SECRET: z.string().default(""),
@@ -115,10 +116,14 @@ export const envSchema = z
       [env.STRATEGY_SCALP_ENABLED, env.SCALP_EXCHANGE, env.SCALP_PAPER_TRADING],
       [env.STRATEGY_COPY_ENABLED, env.COPY_EXCHANGE, env.COPY_PAPER_TRADING],
     ] as const;
-    const liveBybit = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "bybit" && !(env.PAPER_TRADING || paper));
+    const remoteBybit = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "bybit" && !(env.PAPER_TRADING || paper));
+    const liveBybit = remoteBybit && !env.BYBIT_TESTNET && !env.BYBIT_DEMO;
     const liveBinance = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "binance" && !(env.PAPER_TRADING || paper));
-    if (liveBybit && (!(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY) || !(env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET))) {
-      ctx.addIssue({ code: "custom", message: "Live Bybit strategies require API credentials", path: ["BYBIT_API_KEY"] });
+    if (env.BYBIT_TESTNET && env.BYBIT_DEMO) {
+      ctx.addIssue({ code: "custom", message: "BYBIT_TESTNET and BYBIT_DEMO cannot both be true", path: ["BYBIT_DEMO"] });
+    }
+    if (remoteBybit && (!(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY) || !(env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET))) {
+      ctx.addIssue({ code: "custom", message: "Remote Bybit execution requires API credentials", path: ["BYBIT_API_KEY"] });
     }
     if (liveBinance && (!env.BINANCE_API_KEY || !env.BINANCE_API_SECRET)) {
       ctx.addIssue({ code: "custom", message: "Live Binance strategies require API credentials", path: ["BINANCE_API_KEY"] });
@@ -138,13 +143,6 @@ export const envSchema = z
       if (modes.size > 1) {
         ctx.addIssue({ code: "custom", message: `Enabled ${exchange} strategies must use the same paper/live mode`, path: ["STRATEGY_TREND_ENABLED"] });
       }
-    }
-    if (liveBybit && env.BYBIT_TESTNET) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Set PAPER_TRADING=true for simulations; live execution on testnet must be explicit",
-        path: ["PAPER_TRADING"],
-      });
     }
     if (liveBinance && env.BINANCE_TESTNET) {
       ctx.addIssue({

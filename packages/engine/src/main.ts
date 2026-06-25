@@ -40,8 +40,16 @@ const binanceStore = new MarketDataStore();
 const marketStores = new Map<ExchangeId, MarketDataStore>([["bybit", bybitStore], ["binance", binanceStore]]);
 const bybitPaper = activeDescriptors.filter((item) => item.exchange === "bybit").every((item) => item.isPaperTrading);
 const binancePaper = activeDescriptors.filter((item) => item.exchange === "binance").every((item) => item.isPaperTrading);
-const client = new BybitRestClient(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY, env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET, env.BYBIT_TESTNET, bybitPaper, env.MASTER_SECRET);
-const websocket = new BybitWebSocket(bybitStore, marketSymbols, env.BYBIT_TESTNET);
+const client = new BybitRestClient(
+  env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY,
+  env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET,
+  env.BYBIT_TESTNET,
+  bybitPaper,
+  env.MASTER_SECRET,
+  env.BYBIT_DEMO,
+);
+// Demo Trading consumes mainnet public market data; only its private REST domain differs.
+const websocket = new BybitWebSocket(bybitStore, marketSymbols, env.BYBIT_TESTNET && !env.BYBIT_DEMO);
 const bybitAdapter = new BybitAdapter(client, websocket, bybitStore, env.PAPER_FEE_RATE, env.PAPER_SLIPPAGE_BPS);
 const binanceRest = new BinanceRestClient(
   env.BINANCE_API_KEY,
@@ -196,7 +204,12 @@ async function bootstrap(): Promise<void> {
     }
     void discord.alert("Bybit WebSocket disconnected after five retries. Engine halted.");
   });
-  log.info({ paperTrading: bybitPaper, symbols, strategies: activeDescriptors.map((item) => item.id) }, "engine started");
+  log.info({
+    paperTrading: bybitPaper,
+    bybitEnvironment: env.BYBIT_DEMO ? "demo" : env.BYBIT_TESTNET ? "testnet" : "mainnet",
+    symbols,
+    strategies: activeDescriptors.map((item) => item.id),
+  }, "engine started");
 }
 
 function subscribeStrategies(): void {

@@ -40,6 +40,22 @@ endpoints, non-empty credentials, and
 position cap. This acknowledgement is deliberately awkward so a copied `.env` cannot
 silently begin trading real funds.
 
+## Bybit Demo Trading
+
+Bybit Demo Trading is different from Testnet. To send simulated orders against
+mainnet market prices, use:
+
+```dotenv
+BYBIT_TESTNET=false
+BYBIT_DEMO=true
+PAPER_TRADING=false
+TREND_PAPER_TRADING=false
+```
+
+Store the Demo Trading API key in `BYBIT_API_KEY_NEW` and its secret in
+`BYBIT_API_SECRET_NEW`. The engine uses `https://api-demo.bybit.com` for private REST
+requests and the mainnet public WebSocket for market data. Never commit either secret.
+
 Every trade stores `executionMode` (`PAPER` or `LIVE`) so validation statistics cannot
 accidentally mix simulations with real-money fills.
 

@@ -9,6 +9,7 @@ export const configRouter = router({
       symbol: env.TRADING_SYMBOL,
       paperTrading: env.PAPER_TRADING,
       testnet: env.BYBIT_TESTNET,
+      demo: env.BYBIT_DEMO,
       minSignalScore: env.MIN_SIGNAL_SCORE,
       leverageMax: env.TRADING_LEVERAGE_MAX,
       dailyLossLimitUsdt: env.DAILY_LOSS_LIMIT_USDT,

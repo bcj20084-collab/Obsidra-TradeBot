@@ -24,4 +24,25 @@ describe("live trading environment gate", () => {
       BYBIT_API_SECRET: "secret",
     })).toThrow(/LIVE_TRADING_CONFIRMATION/);
   });
+
+  it("allows remote Demo Trading without the live-money acknowledgement", () => {
+    const env = envSchema.parse({
+      ...base,
+      PAPER_TRADING: "false",
+      TREND_PAPER_TRADING: "false",
+      BYBIT_TESTNET: "false",
+      BYBIT_DEMO: "true",
+      BYBIT_API_KEY: "demo-key",
+      BYBIT_API_SECRET: "demo-secret",
+    });
+    expect(env.BYBIT_DEMO).toBe(true);
+  });
+
+  it("rejects selecting Bybit Testnet and Demo simultaneously", () => {
+    expect(() => envSchema.parse({
+      ...base,
+      BYBIT_TESTNET: "true",
+      BYBIT_DEMO: "true",
+    })).toThrow(/cannot both be true/);
+  });
 });
