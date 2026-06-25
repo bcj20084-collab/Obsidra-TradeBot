@@ -250,7 +250,7 @@ async function bootstrap(): Promise<void> {
       mode: item.isPaperTrading ? "PAPER" : item.exchange === "bybit" && env.BYBIT_DEMO ? "DEMO" : "LIVE",
     })),
   }, "info", "Obsidra engine started");
-  operatorBlock("🤖 OBSIDRA STARTED", [
+  operatorBlock("OBSIDRA STARTED", [
     ["Status", status],
     ["Environment", env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"],
     ["Symbols", symbols.join(", ")],
@@ -421,8 +421,8 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     operatorLog(
       "INFO",
       evaluation.signal
-        ? `🎯 SIGNAL | ${symbol} | ${evaluation.signal.direction}`
-        : `🔎 SCAN | ${symbol}`,
+        ? `SIGNAL | ${symbol} | ${evaluation.signal.direction}`
+        : `SCAN | ${symbol}`,
       evaluation.signal
         ? `Confidence: ${(evaluation.signal.confidence * 100).toFixed(1)}% | Entry: $${evaluation.signal.entryPrice.toFixed(4)} | Score: ${evaluation.signal.score}/100`
         : `${evaluation.reason} | Price: ${String(evaluation.details.price ?? "n/a")} | Score: ${String(evaluation.details.score ?? "n/a")}`,
@@ -472,7 +472,7 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     const exchangeError = error instanceof AppError
       && [ErrorCode.EXCHANGE_TEMPORARY, ErrorCode.EXCHANGE_PERMANENT, ErrorCode.RATE_LIMITED].includes(error.code);
     if (exchangeError) {
-      operatorLog("WARNING", `🔌 EXCHANGE ERROR | ${exchange}:${symbol}`, `${error.code}: ${error.message}; next candle will retry`);
+      operatorLog("WARNING", `EXCHANGE ERROR | ${exchange.toUpperCase()}:${symbol}`, `${error.code}: ${error.message} | next candle will retry`);
       log.warn({ error, exchange, symbol }, "evaluation skipped because exchange is unavailable");
     } else {
       status = "ERROR";
@@ -524,19 +524,19 @@ async function logEngineHeartbeat(): Promise<void> {
         ? (trade.direction === "LONG" ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice) * quantity
         : 0;
       return [
-        `📌 ${trade.symbol}`,
+        `POSITION ${trade.symbol}`,
         `Entry: $${(trade.entryPrice ?? 0).toFixed(4)} | Now: $${currentPrice.toFixed(4)} | PnL: ${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(2)} USDT`,
       ];
     });
-    operatorBlock(`📊 STATUS | ${new Date().toISOString()}`, [
-      ["🤖 Bot", status],
-      ["💰 Realized PnL", `${(currentMetrics?.totalPnlUsdt ?? 0).toFixed(2)} USDT`],
-      ["📈 Win Rate", `${(currentMetrics?.winRate ?? 0).toFixed(1)}%`],
-      ["📉 Drawdown", `${(currentMetrics?.currentDrawdown ?? 0).toFixed(2)}%`],
-      ["🎯 Signals 24h", currentMetrics?.signalsGenerated24h ?? 0],
-      ["📌 Active Trades", openTrades.length],
+    operatorBlock(`STATUS | ${new Date().toISOString()}`, [
+      ["Bot", status],
+      ["Realized PnL", `${(currentMetrics?.totalPnlUsdt ?? 0).toFixed(2)} USDT`],
+      ["Win Rate", `${(currentMetrics?.winRate ?? 0).toFixed(1)}%`],
+      ["Drawdown", `${(currentMetrics?.currentDrawdown ?? 0).toFixed(2)}%`],
+      ["Signals 24h", currentMetrics?.signalsGenerated24h ?? 0],
+      ["Active Trades", openTrades.length],
       ...tradeRows,
-      ["⏳ Next scan", "waiting for confirmed 15m candle"],
+      ["Next scan", "waiting for confirmed 15m candle"],
     ]);
   } catch (error) {
     premiumLog("engine", "engine_heartbeat_failed", { error }, "warn", "Bot heartbeat collection failed");

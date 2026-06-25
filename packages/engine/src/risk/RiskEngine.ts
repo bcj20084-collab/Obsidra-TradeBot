@@ -55,7 +55,7 @@ export class RiskEngine {
         regime: signal.regime,
         reason,
       }, "info", "premium risk rejected");
-      operatorLog("WARNING", `🛡️ RISK REJECTED | ${symbol}`, reason);
+      operatorLog("WARNING", `RISK REJECTED | ${symbol}`, reason);
       return decision;
     };
     const daily = await this.dailyLossGuard.check();
@@ -122,7 +122,7 @@ export class RiskEngine {
     }, "info", "premium risk approved");
     operatorLog(
       "INFO",
-      `🛡️ RISK APPROVED | ${symbol}`,
+      `RISK APPROVED | ${symbol}`,
       `Size: ${positionSizeUsdt.toFixed(2)} USDT | Leverage: ${leverage}x | R:R ${riskRewardRatio.toFixed(2)}`,
     );
     return decision;

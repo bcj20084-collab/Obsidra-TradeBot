@@ -6,6 +6,8 @@ import type { ClosedTradeNotification } from "../monitoring/TelegramNotifier.js"
 const log = moduleLogger("ReconciliationService");
 
 export class ReconciliationService {
+  private readonly lastExchangeWarningAt = new Map<string, number>();
+
   constructor(
     private readonly adapters: IExchangeAdapter[],
     private readonly journal: ExecutionJournal,
@@ -59,7 +61,7 @@ export class ReconciliationService {
             }, trade.id);
             operatorLog(
               pnlUsdt !== null && pnlUsdt >= 0 ? "INFO" : "WARNING",
-              `${closeReason === "TAKE_PROFIT" ? "🎯 TAKE PROFIT" : closeReason === "STOP_LOSS" ? "🛑 STOP LOSS" : "🔄 RECONCILED"} | ${trade.symbol}`,
+              `${closeReason === "TAKE_PROFIT" ? "TAKE PROFIT" : closeReason === "STOP_LOSS" ? "STOP LOSS" : "RECONCILED"} | ${trade.symbol}`,
               `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt === null ? "unknown" : `${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT`}`,
             );
             if (belongsToTrade && trade.entryPrice && pnlUsdt !== null && pnlPct !== null) {
@@ -81,8 +83,17 @@ export class ReconciliationService {
           await this.journal.record("RECONCILIATION_UNTRACKED_POSITION", { exchange: adapter.exchangeId, positions: activeExchange });
         }
       } catch (error) {
-        log.warn({ exchange: adapter.exchangeId, symbol, error }, "reconciliation skipped because exchange is unavailable");
-        operatorLog("WARNING", `🔌 EXCHANGE UNAVAILABLE | ${adapter.exchangeId}:${symbol}`, "Reconciliation skipped; engine remains online and will retry");
+        const warningKey = adapter.exchangeId;
+        const lastWarningAt = this.lastExchangeWarningAt.get(warningKey) ?? 0;
+        if (Date.now() - lastWarningAt >= 15 * 60_000) {
+          this.lastExchangeWarningAt.set(warningKey, Date.now());
+          const reason = error instanceof Error ? error.message : String(error);
+          operatorLog(
+            "WARNING",
+            `EXCHANGE UNAVAILABLE | ${adapter.exchangeId.toUpperCase()}`,
+            `${reason} | retrying in background`,
+          );
+        }
       }
     }
   }

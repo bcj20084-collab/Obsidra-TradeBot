@@ -114,7 +114,7 @@ export class OrderManager {
       }, "info", "premium order opened");
       operatorLog(
         "INFO",
-        `🟢 ${signal.direction === "LONG" ? "BUY" : "SELL"} | ${symbol}`,
+        `${signal.direction === "LONG" ? "BUY" : "SELL"} | ${symbol}`,
         `Entry: $${(result.avgFillPrice || signal.entryPrice).toFixed(4)} | SL: $${risk.stopLossPrice.toFixed(4)} | TP: $${risk.takeProfitPrice.toFixed(4)} | Size: ${risk.positionSizeUsdt.toFixed(2)} USDT | ${risk.leverage}x`,
       );
       return trade.id;
@@ -207,7 +207,7 @@ export class OrderManager {
       }, "info", "premium order closed");
       operatorLog(
         pnlUsdt >= 0 ? "INFO" : "WARNING",
-        `${pnlUsdt >= 0 ? "✅ TAKE PROFIT" : "❌ CLOSE"} | ${trade.symbol}`,
+        `${pnlUsdt >= 0 ? "TAKE PROFIT" : "CLOSE"} | ${trade.symbol}`,
         `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%) | Reason: ${reason}`,
       );
       await this.onTradeClosed?.({
