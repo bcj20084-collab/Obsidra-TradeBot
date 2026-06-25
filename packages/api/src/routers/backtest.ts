@@ -77,7 +77,7 @@ export const backtestRouter = router({
         config: input,
         metrics,
         equityCurve: metrics.equityCurve,
-        trades,
+        trades: trades as any,
       },
     });
   }),
