@@ -27,8 +27,14 @@ function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function isSensitiveKey(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return [...sensitiveKeys].some((sensitive) => normalized === sensitive || normalized.includes(sensitive));
+}
+
 function redact(value: unknown, key = ""): unknown {
-  if (sensitiveKeys.has(normalizeKey(key))) return "[REDACTED]";
+  if (isSensitiveKey(key)) return "[REDACTED]";
+  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
   if (Array.isArray(value)) return value.map((item) => redact(item));
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redact(entryValue, entryKey)]));
