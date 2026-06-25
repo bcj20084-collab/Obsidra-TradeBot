@@ -37,8 +37,14 @@ export const envSchema = z
     DAILY_LOSS_LIMIT_USDT: z.coerce.number().positive().default(50),
     WEEKLY_LOSS_LIMIT_USDT: z.coerce.number().positive().default(150),
     MAX_DRAWDOWN_PCT: z.coerce.number().min(1).max(50).default(8),
+    MAX_RISK_PER_TRADE_PCT: z.coerce.number().positive().max(2).default(0.5),
+    MAX_CONSECUTIVE_LOSSES: z.coerce.number().int().min(1).max(10).default(3),
+    LOSS_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(240),
     MIN_SIGNAL_SCORE: z.coerce.number().min(55).max(85).default(65),
     SPREAD_MAX_PCT: z.coerce.number().positive().max(1).default(0.05),
+    PAPER_FEE_RATE: z.coerce.number().min(0).max(0.01).default(0.00055),
+    PAPER_SLIPPAGE_BPS: z.coerce.number().min(0).max(100).default(2),
+    LIVE_TRADING_CONFIRMATION: z.string().default(""),
     TELEGRAM_BOT_TOKEN: z.string().default(""),
     TELEGRAM_CHAT_ID: z.string().default(""),
     DISCORD_WEBHOOK_TRADES: optionalUrl,
@@ -117,6 +123,16 @@ export const envSchema = z
     if (liveBinance && (!env.BINANCE_API_KEY || !env.BINANCE_API_SECRET)) {
       ctx.addIssue({ code: "custom", message: "Live Binance strategies require API credentials", path: ["BINANCE_API_KEY"] });
     }
+    if ((liveBybit || liveBinance) && env.NODE_ENV !== "production") {
+      ctx.addIssue({ code: "custom", message: "Live trading requires NODE_ENV=production", path: ["NODE_ENV"] });
+    }
+    if ((liveBybit || liveBinance) && env.LIVE_TRADING_CONFIRMATION !== "I_ACCEPT_REAL_MONEY_RISK") {
+      ctx.addIssue({
+        code: "custom",
+        message: "Live trading requires LIVE_TRADING_CONFIRMATION=I_ACCEPT_REAL_MONEY_RISK",
+        path: ["LIVE_TRADING_CONFIRMATION"],
+      });
+    }
     for (const exchange of ["bybit", "binance"] as const) {
       const modes = new Set(strategyModes.filter(([enabled, candidate]) => enabled && candidate === exchange).map(([, , paper]) => env.PAPER_TRADING || paper));
       if (modes.size > 1) {
@@ -128,6 +144,13 @@ export const envSchema = z
         code: "custom",
         message: "Set PAPER_TRADING=true for simulations; live execution on testnet must be explicit",
         path: ["PAPER_TRADING"],
+      });
+    }
+    if (liveBinance && env.BINANCE_TESTNET) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Disable BINANCE_TESTNET before live Binance execution",
+        path: ["BINANCE_TESTNET"],
       });
     }
   });

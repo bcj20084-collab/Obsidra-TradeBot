@@ -21,6 +21,8 @@ snapshots, while the dashboard reports stale/offline data explicitly.
 
 > **Safety first:** `PAPER_TRADING` defaults to `true`. Do not enable live trading
 > until the strategy has passed at least 30 days / 200 trades of paper validation.
+> Paper fills include configurable spread crossing, slippage and fees; live mode also
+> requires an explicit real-money acknowledgement.
 
 ## Quick start
 

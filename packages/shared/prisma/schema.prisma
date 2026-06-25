@@ -15,6 +15,7 @@ model Trade {
   symbol           String
   exchange         String    @default("bybit")
   strategyId       String    @default("trend")
+  executionMode    String    @default("PAPER")
   direction        String
   status           String
   entryPrice       Float?
@@ -42,6 +43,7 @@ model Trade {
 
   @@index([status, symbol])
   @@index([closedAt])
+  @@index([executionMode, closedAt])
 }
 
 model OrderTransition {

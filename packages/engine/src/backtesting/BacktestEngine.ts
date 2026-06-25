@@ -50,7 +50,8 @@ export class BacktestEngine {
         continue;
       }
 
-      const history = normalized.filter((row) => row.symbol === candle.symbol && row.openTime <= candle.openTime).slice(-56);
+      // Only completed candles may influence a decision executed at this candle's open.
+      const history = normalized.filter((row) => row.symbol === candle.symbol && row.openTime < candle.openTime).slice(-56);
       if (history.length < 56) continue;
       const signal = this.simpleSignal(history);
       if (!signal) continue;
@@ -59,8 +60,8 @@ export class BacktestEngine {
       if (atr <= 0 || atr / candle.close >= 0.03) continue;
       const riskDistance = atr * 1.5;
       const rewardDistance = atr * 2.5;
-      const stopLoss = signal === "LONG" ? candle.close - riskDistance : candle.close + riskDistance;
-      const takeProfit = signal === "LONG" ? candle.close + rewardDistance : candle.close - rewardDistance;
+      const stopLoss = signal === "LONG" ? candle.open - riskDistance : candle.open + riskDistance;
+      const takeProfit = signal === "LONG" ? candle.open + rewardDistance : candle.open - rewardDistance;
       const riskRewardRatio = rewardDistance / Math.max(riskDistance, Number.EPSILON);
       if (riskRewardRatio < 1.5) continue;
 

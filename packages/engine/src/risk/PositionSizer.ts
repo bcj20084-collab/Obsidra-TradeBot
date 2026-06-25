@@ -19,3 +19,19 @@ export function calculatePositionSize(
   const adaptiveCap = equity * (maxPositionPct / 100);
   return Math.max(0, Math.min(kelly * equity, adaptiveCap, maxPositionUsdt));
 }
+
+export function capPositionByStopRisk(
+  positionSizeUsdt: number,
+  equity: number,
+  entryPrice: number,
+  stopLossPrice: number,
+  leverage: number,
+  maxRiskPct: number,
+): number {
+  if (positionSizeUsdt <= 0 || equity <= 0 || entryPrice <= 0 || leverage <= 0 || maxRiskPct <= 0) return 0;
+  const stopDistancePct = Math.abs(entryPrice - stopLossPrice) / entryPrice;
+  if (!Number.isFinite(stopDistancePct) || stopDistancePct <= 0) return 0;
+  const riskBudgetUsdt = equity * (maxRiskPct / 100);
+  const maximumMarginAtRisk = riskBudgetUsdt / (stopDistancePct * leverage);
+  return Math.max(0, Math.min(positionSizeUsdt, maximumMarginAtRisk));
+}

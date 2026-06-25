@@ -42,8 +42,15 @@ const bybitPaper = activeDescriptors.filter((item) => item.exchange === "bybit")
 const binancePaper = activeDescriptors.filter((item) => item.exchange === "binance").every((item) => item.isPaperTrading);
 const client = new BybitRestClient(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY, env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET, env.BYBIT_TESTNET, bybitPaper, env.MASTER_SECRET);
 const websocket = new BybitWebSocket(bybitStore, marketSymbols, env.BYBIT_TESTNET);
-const bybitAdapter = new BybitAdapter(client, websocket, bybitStore);
-const binanceRest = new BinanceRestClient(env.BINANCE_API_KEY, env.BINANCE_API_SECRET, env.BINANCE_TESTNET, binancePaper);
+const bybitAdapter = new BybitAdapter(client, websocket, bybitStore, env.PAPER_FEE_RATE, env.PAPER_SLIPPAGE_BPS);
+const binanceRest = new BinanceRestClient(
+  env.BINANCE_API_KEY,
+  env.BINANCE_API_SECRET,
+  env.BINANCE_TESTNET,
+  binancePaper,
+  env.PAPER_FEE_RATE,
+  env.PAPER_SLIPPAGE_BPS,
+);
 const binanceWebsocket = new BinanceWebSocket(env.BINANCE_TESTNET);
 const binanceAdapter = new BinanceAdapter(binanceRest, binanceWebsocket);
 const exchanges = new ExchangeRouter([bybitAdapter, binanceAdapter]);
@@ -100,7 +107,18 @@ function createContext(exchange: ExchangeId, symbol: string): TradingContext {
     circuitBreaker,
     ml,
     signals: new SignalEngine(store, ml, adaptive, circuitBreaker),
-    risk: new RiskEngine(env.DAILY_LOSS_LIMIT_USDT, env.WEEKLY_LOSS_LIMIT_USDT, env.MAX_DRAWDOWN_PCT, env.TRADING_POSITION_MAX_USDT, preflight, adapter, adaptive),
+    risk: new RiskEngine(
+      env.DAILY_LOSS_LIMIT_USDT,
+      env.WEEKLY_LOSS_LIMIT_USDT,
+      env.MAX_DRAWDOWN_PCT,
+      env.TRADING_POSITION_MAX_USDT,
+      preflight,
+      adapter,
+      adaptive,
+      env.MAX_RISK_PER_TRADE_PCT,
+      env.MAX_CONSECUTIVE_LOSSES,
+      env.LOSS_COOLDOWN_MINUTES,
+    ),
   };
 }
 

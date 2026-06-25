@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePositionSize } from "./PositionSizer.js";
+import { calculatePositionSize, capPositionByStopRisk } from "./PositionSizer.js";
 
 describe("calculatePositionSize", () => {
   it("uses one percent before enough history exists", () => {
@@ -9,5 +9,13 @@ describe("calculatePositionSize", () => {
   it("never exceeds caps", () => {
     const trades = Array.from({ length: 50 }, (_, index) => ({ pnlUsdt: index % 3 ? 20 : -10 }));
     expect(calculatePositionSize(10_000, trades, 500, 2)).toBeLessThanOrEqual(200);
+  });
+
+  it("caps margin so the stop loss cannot exceed the risk budget", () => {
+    expect(capPositionByStopRisk(1_000, 10_000, 100, 98, 5, 0.5)).toBe(500);
+  });
+
+  it("rejects a zero-distance stop", () => {
+    expect(capPositionByStopRisk(1_000, 10_000, 100, 100, 5, 0.5)).toBe(0);
   });
 });

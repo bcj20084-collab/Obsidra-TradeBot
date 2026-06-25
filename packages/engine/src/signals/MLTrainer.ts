@@ -23,7 +23,7 @@ export class MLTrainer {
       const raw = (signal.mlFeatures ?? signal) as Record<string, unknown>;
       const x = vectorFromRecord(raw);
       if (x.length !== ML_FEATURE_NAMES.length) return [];
-      return [{ x, y: (trade.pnlUsdt ?? 0) > (trade.feeUsdt ?? 0) ? 1 : 0 }];
+      return [{ x, y: (trade.pnlUsdt ?? 0) > 0 ? 1 : 0 }];
     });
     if (dataset.length < 50) return;
 

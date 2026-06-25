@@ -2,7 +2,7 @@ import { premiumLog, prisma, type Direction, type SignalResult } from "@obsidra/
 import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
 import type { AdaptiveParams } from "../signals/AdaptiveParams.js";
 import { DailyLossGuard } from "./DailyLossGuard.js";
-import { calculatePositionSize } from "./PositionSizer.js";
+import { calculatePositionSize, capPositionByStopRisk } from "./PositionSizer.js";
 import type { PreFlightCheck } from "./PreFlightCheck.js";
 
 export interface RiskDecision {
@@ -27,6 +27,9 @@ export class RiskEngine {
     private readonly preflight: PreFlightCheck,
     private readonly adapter: IExchangeAdapter,
     private readonly adaptive: AdaptiveParams,
+    private readonly maxRiskPerTradePct = 0.5,
+    private readonly maxConsecutiveLosses = 3,
+    private readonly lossCooldownMinutes = 240,
   ) {
     this.dailyLossGuard = new DailyLossGuard(dailyLossLimit, weeklyLossLimit);
   }
@@ -67,14 +70,29 @@ export class RiskEngine {
       where: { exchange: this.adapter.exchangeId, pnlUsdt: { not: null } },
       orderBy: { closedAt: "desc" },
       take: 50,
-      select: { pnlUsdt: true },
+      select: { pnlUsdt: true, closedAt: true },
     });
+    const recentLosses = trades.findIndex((trade) => (trade.pnlUsdt ?? 0) >= 0);
+    const lossStreak = recentLosses === -1 ? trades.length : recentLosses;
+    const lastClosedAt = trades[0]?.closedAt;
+    if (lossStreak >= this.maxConsecutiveLosses && lastClosedAt
+      && Date.now() - lastClosedAt.getTime() < this.lossCooldownMinutes * 60_000) {
+      return reject(`Loss cooldown active after ${lossStreak} consecutive losses`);
+    }
     const { config } = this.adaptive.snapshot;
-    const positionSizeUsdt = calculatePositionSize(equity, trades, this.maxPositionUsdt, config.maxPositionPct);
-    if (positionSizeUsdt <= 0) return reject("Position sizing returned zero");
+    const basePositionSizeUsdt = calculatePositionSize(equity, trades, this.maxPositionUsdt, config.maxPositionPct);
     const atrValue = signal.indicators.atr ?? 0;
     const atrLeverage = atrValue > 0 ? 0.02 / (atrValue / signal.entryPrice) : 1;
     const leverage = Math.max(1, Math.min(config.leverageMax, Math.floor(atrLeverage)));
+    const positionSizeUsdt = capPositionByStopRisk(
+      basePositionSizeUsdt,
+      equity,
+      signal.entryPrice,
+      signal.stopLoss,
+      leverage,
+      this.maxRiskPerTradePct,
+    );
+    if (positionSizeUsdt <= 0) return reject("Position sizing returned zero");
     const riskDistance = Math.abs(signal.entryPrice - signal.stopLoss);
     const rewardDistance = Math.abs(signal.takeProfit - signal.entryPrice);
     const riskRewardRatio = rewardDistance / Math.max(riskDistance, Number.EPSILON);

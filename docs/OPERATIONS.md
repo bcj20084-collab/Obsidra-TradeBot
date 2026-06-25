@@ -34,8 +34,23 @@ minimum before considering production is:
 5. Manual reconciliation of a restart while a paper position is open.
 6. Independent review of API key permissions (trade only; withdrawals disabled).
 
-Live mode requires `PAPER_TRADING=false`, non-empty Bybit credentials, and explicit
-production environment configuration. Start with the smallest allowed position cap.
+Live mode requires `NODE_ENV=production`, `PAPER_TRADING=false`, production exchange
+endpoints, non-empty credentials, and
+`LIVE_TRADING_CONFIRMATION=I_ACCEPT_REAL_MONEY_RISK`. Start with the smallest allowed
+position cap. This acknowledgement is deliberately awkward so a copied `.env` cannot
+silently begin trading real funds.
+
+Every trade stores `executionMode` (`PAPER` or `LIVE`) so validation statistics cannot
+accidentally mix simulations with real-money fills.
+
+## Execution realism and risk budget
+
+- Paper market orders cross the current bid/ask, apply `PAPER_SLIPPAGE_BPS`, and charge
+  `PAPER_FEE_RATE`. Tune both values conservatively for the exchange and account tier.
+- `MAX_RISK_PER_TRADE_PCT` caps the estimated loss at the stop, including leverage.
+- After `MAX_CONSECUTIVE_LOSSES`, new entries pause for `LOSS_COOLDOWN_MINUTES`.
+- Backtests make decisions only from completed candles and execute at the next candle
+  open. This avoids same-candle look-ahead bias.
 
 ## Incident controls
 
@@ -47,8 +62,9 @@ production environment configuration. Start with the smallest allowed position c
 ## Known operational boundary
 
 The repository provides the platform and conservative controls, but no strategy can
-guarantee profit. Backtesting, slippage modelling, exchange-specific quantity rounding,
-and external security review remain mandatory before real funds are used.
+guarantee profit. Exchange-specific quantity/tick rounding, testnet smoke tests,
+walk-forward validation, and external security review remain mandatory before real
+funds are used.
 # Copy trading data source
 
 Set `COPY_POSITION_FEED_URL` only to an authorized HTTPS endpoint that returns an

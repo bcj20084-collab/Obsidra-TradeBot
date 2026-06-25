@@ -37,6 +37,7 @@ export class OrderManager {
         symbol,
         exchange,
         strategyId,
+        executionMode: this.exchanges.get(exchange).paperTrading ? "PAPER" : "LIVE",
         direction: signal.direction,
         status: "PENDING",
         stopLoss: risk.stopLossPrice,

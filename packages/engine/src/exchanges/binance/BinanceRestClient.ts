@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { AppError, ErrorCode, moduleLogger } from "@obsidra/shared";
 import { TokenBucket } from "../../data/TokenBucket.js";
+import { calculatePaperMarketFill } from "../../execution/PaperFillModel.js";
 import type { OHLCVCandle, OrderParams, OrderResult, Position } from "../IExchangeAdapter.js";
 
 const log = moduleLogger("BinanceRestClient");
@@ -8,7 +9,14 @@ const log = moduleLogger("BinanceRestClient");
 export class BinanceRestClient {
   private readonly baseUrl: string;
   private readonly limiter = new TokenBucket(40, 40);
-  constructor(private readonly apiKey: string, private readonly secret: string, testnet: boolean, private readonly paper: boolean) {
+  constructor(
+    private readonly apiKey: string,
+    private readonly secret: string,
+    testnet: boolean,
+    private readonly paper: boolean,
+    private readonly paperFeeRate = 0.00055,
+    private readonly paperSlippageBps = 2,
+  ) {
     this.baseUrl = testnet ? "https://testnet.binancefuture.com" : "https://fapi.binance.com";
   }
   get isPaperTrading(): boolean { return this.paper; }
@@ -32,17 +40,41 @@ export class BinanceRestClient {
     return json;
   }
   async placeOrder(params: OrderParams): Promise<OrderResult> {
-    if (this.paper) return {
-      exchangeOrderId: `paper-binance-${randomUUID()}`,
-      clientOrderId: params.clientOrderId,
-      symbol: params.symbol,
-      side: params.side,
-      status: params.orderType === "Limit" ? "New" : "Filled",
-      avgFillPrice: params.price ?? 0,
-      filledQty: params.orderType === "Limit" ? 0 : params.qty,
-      feeUsdt: 0,
-      timestamp: Date.now(),
-    };
+    if (this.paper) {
+      if (params.orderType === "Market") {
+        const book = await this.publicGet<{ bidPrice: string; askPrice: string }>("/fapi/v1/ticker/bookTicker", { symbol: params.symbol });
+        const fill = calculatePaperMarketFill({
+          side: params.side,
+          qty: params.qty,
+          bid: Number(book.bidPrice),
+          ask: Number(book.askPrice),
+          feeRate: this.paperFeeRate,
+          slippageBps: this.paperSlippageBps,
+        });
+        return {
+          exchangeOrderId: `paper-binance-${randomUUID()}`,
+          clientOrderId: params.clientOrderId,
+          symbol: params.symbol,
+          side: params.side,
+          status: "Filled",
+          avgFillPrice: fill.fillPrice,
+          filledQty: fill.filledQty,
+          feeUsdt: fill.feeUsdt,
+          timestamp: Date.now(),
+        };
+      }
+      return {
+        exchangeOrderId: `paper-binance-${randomUUID()}`,
+        clientOrderId: params.clientOrderId,
+        symbol: params.symbol,
+        side: params.side,
+        status: "New",
+        avgFillPrice: params.price ?? 0,
+        filledQty: 0,
+        feeUsdt: 0,
+        timestamp: Date.now(),
+      };
+    }
     const entry = await this.signed<{ orderId: number; avgPrice?: string; executedQty?: string }>("POST", "/fapi/v1/order", {
       symbol: params.symbol, side: params.side === "Buy" ? "BUY" : "SELL", type: params.orderType.toUpperCase(),
       quantity: String(params.qty), newClientOrderId: params.clientOrderId,

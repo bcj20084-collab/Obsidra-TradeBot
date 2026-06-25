@@ -61,7 +61,7 @@ export class SignalEngine {
       take: 20,
       select: { pnlUsdt: true, feeUsdt: true },
     });
-    const recentWins = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > (trade.feeUsdt ?? 0)).length;
+    const recentWins = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
     const recentWinRate = recentTrades.length ? recentWins / recentTrades.length : 0.5;
     const recentWinSum = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0)
       .reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);

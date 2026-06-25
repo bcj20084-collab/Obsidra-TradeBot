@@ -3,13 +3,20 @@ import type { IExchangeAdapter, OHLCVCandle, OrderParams, OrderResult, Position 
 import type { BybitRestClient } from "../../data/BybitRestClient.js";
 import type { BybitWebSocket } from "../../data/BybitWebSocket.js";
 import type { MarketDataStore } from "../../data/MarketDataStore.js";
+import { calculatePaperMarketFill } from "../../execution/PaperFillModel.js";
 
 const log = moduleLogger("BybitAdapter");
 
 export class BybitAdapter implements IExchangeAdapter {
   readonly exchangeId = "bybit" as const;
   get paperTrading(): boolean { return this.rest.isPaperTrading; }
-  constructor(private readonly rest: BybitRestClient, private readonly ws: BybitWebSocket, private readonly store: MarketDataStore) {}
+  constructor(
+    private readonly rest: BybitRestClient,
+    private readonly ws: BybitWebSocket,
+    private readonly store: MarketDataStore,
+    private readonly paperFeeRate = 0.00055,
+    private readonly paperSlippageBps = 2,
+  ) {}
   subscribeCandles(symbol: string, intervals: string[], callback: (candle: OHLCVCandle) => void): void {
     this.ws.on("kline", (candle) => {
       if (candle.symbol === symbol && intervals.includes(candle.timeframe)) {
@@ -51,6 +58,27 @@ export class BybitAdapter implements IExchangeAdapter {
       clientOrderId: params.clientOrderId,
     });
     if (result.paper) {
+      if (params.orderType === "Market") {
+        const book = await this.getBestBidAsk(params.symbol);
+        const fill = calculatePaperMarketFill({
+          side: params.side,
+          qty: params.qty,
+          ...book,
+          feeRate: this.paperFeeRate,
+          slippageBps: this.paperSlippageBps,
+        });
+        return {
+          exchangeOrderId: result.orderId,
+          clientOrderId: params.clientOrderId,
+          symbol: params.symbol,
+          side: params.side,
+          status: "Filled",
+          avgFillPrice: fill.fillPrice,
+          filledQty: fill.filledQty,
+          feeUsdt: fill.feeUsdt,
+          timestamp: Date.now(),
+        };
+      }
       return {
         exchangeOrderId: result.orderId,
         clientOrderId: params.clientOrderId,
