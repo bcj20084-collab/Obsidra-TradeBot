@@ -25,10 +25,10 @@ interface Events {
 
 export class BybitWebSocket extends EventEmitter<Events> {
   private socket?: WebSocket;
-  private heartbeat?: NodeJS.Timeout;
-  private pongDeadline?: NodeJS.Timeout;
-  private staleWatchdog?: NodeJS.Timeout;
-  private reconnectTimer?: NodeJS.Timeout;
+  private heartbeat: NodeJS.Timeout | undefined;
+  private pongDeadline: NodeJS.Timeout | undefined;
+  private staleWatchdog: NodeJS.Timeout | undefined;
+  private reconnectTimer: NodeJS.Timeout | undefined;
   private reconnectAttempts = 0;
   private intentionallyClosed = false;
   private lastMessageAt = 0;
