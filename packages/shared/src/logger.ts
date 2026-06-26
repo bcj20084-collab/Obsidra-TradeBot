@@ -138,13 +138,23 @@ function errorSummary(value: unknown): string {
   if (value instanceof Error) return value.message;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
+    const candidate = record.error ?? record.err;
+    const context = candidate && typeof candidate === "object" && "context" in candidate
+      ? (candidate as { context?: unknown }).context
+      : undefined;
+    const errorContext = context && typeof context === "object" ? context as Record<string, unknown> : {};
     const details = [
       typeof record.credentialSource === "string" ? `credential=${record.credentialSource}` : "",
+      typeof errorContext.credentialSource === "string" ? `credential=${errorContext.credentialSource}` : "",
       typeof record.httpStatus === "number" ? `http=${record.httpStatus}` : "",
+      typeof errorContext.httpStatus === "number" ? `http=${errorContext.httpStatus}` : "",
       typeof record.hasFallback === "boolean" ? `fallback=${record.hasFallback ? "yes" : "no"}` : "",
       typeof record.path === "string" ? `path=${record.path}` : "",
+      typeof errorContext.bybitHost === "string" ? `host=${errorContext.bybitHost}` : "",
+      typeof errorContext.credentialKeyLength === "number" ? `keyLength=${errorContext.credentialKeyLength}` : "",
+      typeof errorContext.credentialKeyFingerprint === "string" ? `keyFingerprint=${errorContext.credentialKeyFingerprint}` : "",
+      typeof errorContext.timestampOffsetMs === "number" ? `timeOffsetMs=${errorContext.timestampOffsetMs}` : "",
     ].filter(Boolean);
-    const candidate = record.error ?? record.err;
     const message = candidate instanceof Error
       ? candidate.message
       : candidate && typeof candidate === "object" && "message" in candidate
@@ -152,7 +162,8 @@ function errorSummary(value: unknown): string {
         : typeof record.reason === "string"
           ? record.reason
           : "";
-    return [...details, message].filter(Boolean).join(" | ");
+    const hint = typeof errorContext.authHint === "string" ? errorContext.authHint : "";
+    return [...details, message, hint].filter(Boolean).join(" | ");
   }
   return "";
 }
