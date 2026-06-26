@@ -1,47 +1,22 @@
 import { spawn } from "node:child_process";
 
-const startedAt = Date.now();
 const childConfigs = [
   { name: "api", entrypoint: "packages/api/dist/index.js" },
   { name: "engine", entrypoint: "packages/engine/dist/main.js" },
 ];
 
-function compactStrings(entries) {
-  return Object.fromEntries(Object.entries(entries).filter(([, value]) => value && value.length > 0));
-}
-
-function railwayContext() {
-  return compactStrings({
-    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID,
-    environmentId: process.env.RAILWAY_ENVIRONMENT_ID,
-    environmentName: process.env.RAILWAY_ENVIRONMENT_NAME,
-    projectId: process.env.RAILWAY_PROJECT_ID,
-    publicDomain: process.env.RAILWAY_PUBLIC_DOMAIN,
-    replicaRegion: process.env.RAILWAY_REPLICA_REGION,
-    serviceId: process.env.RAILWAY_SERVICE_ID,
-    serviceName: process.env.RAILWAY_SERVICE_NAME,
-    staticUrl: process.env.RAILWAY_STATIC_URL,
-  });
+function cleanText(value) {
+  return String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function premiumLog(level, event, message, context = {}) {
-  const payload = {
-    timestamp: new Date().toISOString(),
-    level,
-    app: "obsidra-tradebot",
-    service: "obsidra",
-    module: "production-launcher",
-    premium: true,
-    logTier: "premium",
-    marker: "OBSIDRA_PREMIUM_LOG",
-    event,
-    message,
-    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1_000),
-    railway: railwayContext(),
-    context,
-  };
   const stream = level === "fatal" || level === "error" ? process.stderr : process.stdout;
-  stream.write(`${JSON.stringify(payload)}\n`);
+  const timestamp = new Date().toISOString().replace("T", " ").replace("Z", "");
+  const detail = context.name ? ` | ${cleanText(context.name)}` : "";
+  stream.write(`${timestamp} | ${level.toUpperCase().padEnd(7)} | launcher | ${cleanText(message || event)}${detail}\n`);
 }
 
 premiumLog("info", "launcher_starting", "Premium production launcher starting", {

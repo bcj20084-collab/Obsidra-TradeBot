@@ -3,6 +3,7 @@ import winston from "winston";
 import { getEnv } from "./env.js";
 
 const env = getEnv();
+const plainRuntimeLogs = env.NODE_ENV === "production" || Boolean(process.env.RAILWAY_ENVIRONMENT_ID);
 
 const sensitiveKeys = new Set([
   "apikey",
@@ -117,6 +118,10 @@ export function moduleLogger(module: string) {
 
       if (pinoLogMethods.has(String(property)) && typeof value === "function") {
         return (...args: unknown[]) => {
+          if (plainRuntimeLogs) {
+            writePlainModuleLog(module, String(property).toUpperCase(), args);
+            return undefined;
+          }
           if (args.length === 0 || typeof args[0] === "string") return value.call(target, ...args);
           const [context, ...rest] = args;
           return value.call(target, redact(context), ...rest);
@@ -127,6 +132,33 @@ export function moduleLogger(module: string) {
       return value;
     },
   });
+}
+
+function errorSummary(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const candidate = record.error ?? record.err;
+    if (candidate instanceof Error) return candidate.message;
+    if (candidate && typeof candidate === "object" && "message" in candidate) return cleanOperatorText((candidate as { message?: unknown }).message);
+    if (typeof record.reason === "string") return record.reason;
+  }
+  return "";
+}
+
+function writePlainModuleLog(module: string, level: string, args: unknown[]): void {
+  const stream = ["FATAL", "ERROR", "WARN"].includes(level) ? process.stderr : process.stdout;
+  const message = typeof args[0] === "string"
+    ? args[0]
+    : typeof args[1] === "string"
+      ? args[1]
+      : "log";
+  const extra = args.find((arg) => arg && typeof arg === "object");
+  const summary = errorSummary(redact(extra));
+  const timestamp = new Date().toISOString().replace("T", " ").replace("Z", "");
+  const normalizedLevel = level === "WARN" ? "WARNING" : level;
+  const line = `${timestamp} | ${normalizedLevel.padEnd(7)} | ${cleanOperatorText(module)} | ${cleanOperatorText(message)}${summary ? ` | ${summary}` : ""}`;
+  stream.write(`${line}\n`);
 }
 
 export function premiumLog(
