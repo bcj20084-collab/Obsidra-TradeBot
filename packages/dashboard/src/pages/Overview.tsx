@@ -2,6 +2,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap
 import type { Metrics, Trade } from "../lib/types";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
+import { TopBotParity } from "../components/TopBotParity";
 import { TradeTable } from "../components/TradeTable";
 
 export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[] }) {
@@ -114,6 +115,8 @@ export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[
         </div>
         <TradeTable trades={trades.slice(0, 8)} compact />
       </section>
+
+      <TopBotParity />
     </div>
   );
 }
