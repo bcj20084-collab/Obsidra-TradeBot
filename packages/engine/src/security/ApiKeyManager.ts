@@ -13,8 +13,8 @@ export class ApiKeyManager {
 
   constructor(apiKey: string, apiSecret: string, masterSecret: string) {
     this.key = pbkdf2Sync(masterSecret, "obsidra-api-key-v2", 100_000, 32, "sha256");
-    this.apiKey = this.encrypt(apiKey);
-    this.apiSecret = this.encrypt(apiSecret);
+    this.apiKey = this.encrypt(apiKey.trim());
+    this.apiSecret = this.encrypt(apiSecret.trim());
   }
 
   withCredentials<T>(operation: (apiKey: string, apiSecret: string) => T): T {

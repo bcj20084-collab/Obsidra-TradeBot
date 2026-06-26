@@ -34,7 +34,7 @@ describe("parseBybitEnvelope", () => {
     expect(() => parseBybitEnvelope(response(403), "", "GET", "/v5/position/list"))
       .toThrow(expect.objectContaining({
         code: ErrorCode.EXCHANGE_PERMANENT,
-        message: expect.stringContaining("empty response"),
+        message: expect.stringContaining("auth failed"),
         context: expect.objectContaining({ httpStatus: 403 }),
       }));
   });

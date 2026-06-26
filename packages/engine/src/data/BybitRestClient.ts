@@ -35,9 +35,12 @@ export function parseBybitEnvelope<T>(
 ): BybitEnvelope<T> {
   const contentType = response.headers.get("content-type") ?? "unknown";
   if (!responseText.trim()) {
+    const authFailure = response.status === 401 || response.status === 403;
     throw new AppError(
-      response.status === 401 || response.status === 403 ? ErrorCode.EXCHANGE_PERMANENT : ErrorCode.EXCHANGE_TEMPORARY,
-      `Bybit returned an empty response (HTTP ${response.status})`,
+      authFailure ? ErrorCode.EXCHANGE_PERMANENT : ErrorCode.EXCHANGE_TEMPORARY,
+      authFailure
+        ? `Bybit auth failed (HTTP ${response.status}). Check API environment, key/secret, permissions and IP whitelist.`
+        : `Bybit returned an empty response (HTTP ${response.status})`,
       { method, path, httpStatus: response.status, contentType, responseBytes: 0 },
     );
   }
@@ -230,8 +233,8 @@ export class BybitRestClient {
     payload: Record<string, unknown>,
   ): Promise<T> {
     await this.privateLimiter.take();
-    const receiveWindow = "5000";
-    const body = method === "POST" ? JSON.stringify(payload) : new URLSearchParams(payload as Record<string, string>).toString();
+    const receiveWindow = "10000";
+    const body = method === "POST" ? JSON.stringify(payload) : this.queryString(payload);
     const url = method === "GET" ? `${this.baseUrl}${path}?${body}` : `${this.baseUrl}${path}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -248,6 +251,7 @@ export class BybitRestClient {
             "Content-Type": "application/json",
             "X-BAPI-API-KEY": attemptCredentials.apiKey,
             "X-BAPI-SIGN": attemptCredentials.signature,
+            "X-BAPI-SIGN-TYPE": "2",
             "X-BAPI-TIMESTAMP": attemptTimestamp,
             "X-BAPI-RECV-WINDOW": receiveWindow,
           },
@@ -290,5 +294,15 @@ export class BybitRestClient {
       }
     }
     throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, "Retry loop exhausted");
+  }
+
+  private queryString(payload: Record<string, unknown>): string {
+    const query = new URLSearchParams();
+    for (const key of Object.keys(payload).sort()) {
+      const value = payload[key];
+      if (value === undefined || value === null) continue;
+      query.set(key, String(value));
+    }
+    return query.toString();
   }
 }
