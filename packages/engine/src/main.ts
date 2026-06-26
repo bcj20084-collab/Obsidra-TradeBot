@@ -165,9 +165,11 @@ function createContext(exchange: ExchangeId, symbol: string): TradingContext {
 }
 
 const initialPairs = new Map<string, { exchange: ExchangeId; symbol: string }>();
-for (const symbol of symbols) initialPairs.set(contextKey("bybit", symbol), { exchange: "bybit", symbol });
 for (const descriptor of activeDescriptors) {
   if (descriptor.symbol !== "MULTI") initialPairs.set(contextKey(descriptor.exchange, descriptor.symbol), { exchange: descriptor.exchange, symbol: descriptor.symbol });
+}
+if (initialPairs.size === 0) {
+  for (const symbol of symbols) initialPairs.set(contextKey("bybit", symbol), { exchange: "bybit", symbol });
 }
 const contexts = new Map([...initialPairs].map(([key, pair]) => [key, createContext(pair.exchange, pair.symbol)]));
 

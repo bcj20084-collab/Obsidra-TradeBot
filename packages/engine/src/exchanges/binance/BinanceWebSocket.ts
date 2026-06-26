@@ -4,6 +4,18 @@ import type { OHLCVCandle } from "../IExchangeAdapter.js";
 
 interface Events { candle: [string, OHLCVCandle]; ticker: [string, number, number]; fatal: [] }
 
+function toBinanceInterval(interval: string): string {
+  if (interval === "60") return "1h";
+  if (interval === "240") return "4h";
+  return /^\d+$/.test(interval) ? `${interval}m` : interval;
+}
+
+function fromBinanceInterval(interval: string): string {
+  if (interval === "1h") return "60";
+  if (interval === "4h") return "240";
+  return interval.endsWith("m") ? interval.slice(0, -1) : interval;
+}
+
 export class BinanceWebSocket extends EventEmitter<Events> {
   private socket?: WebSocket;
   private attempts = 0;
@@ -24,7 +36,7 @@ export class BinanceWebSocket extends EventEmitter<Events> {
     const symbols = [...this.symbols];
     const intervals = [...this.intervals];
     const streams = symbols.flatMap((symbol) => [
-      ...intervals.map((interval) => `${symbol.toLowerCase()}@kline_${/^\d+$/.test(interval) ? `${interval}m` : interval}`),
+      ...intervals.map((interval) => `${symbol.toLowerCase()}@kline_${toBinanceInterval(interval)}`),
       `${symbol.toLowerCase()}@markPrice@1s`,
     ]);
     if (!streams.length) return;
@@ -46,7 +58,7 @@ export class BinanceWebSocket extends EventEmitter<Events> {
     if (data.e === "kline") {
       const k = data.k as Record<string, unknown>;
       this.emit("candle", String(data.s), {
-        symbol: String(data.s), interval: String(k.i), openTime: Number(k.t), closeTime: Number(k.T),
+        symbol: String(data.s), interval: fromBinanceInterval(String(k.i)), openTime: Number(k.t), closeTime: Number(k.T),
         open: Number(k.o), high: Number(k.h), low: Number(k.l), close: Number(k.c), volume: Number(k.v),
         confirmed: Boolean(k.x),
       });

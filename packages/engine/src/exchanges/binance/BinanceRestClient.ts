@@ -6,6 +6,12 @@ import type { OHLCVCandle, OrderParams, OrderResult, Position } from "../IExchan
 
 const log = moduleLogger("BinanceRestClient");
 
+function toBinanceInterval(interval: string): string {
+  if (interval === "60") return "1h";
+  if (interval === "240") return "4h";
+  return /^\d+$/.test(interval) ? `${interval}m` : interval;
+}
+
 export class BinanceRestClient {
   private readonly baseUrl: string;
   private readonly limiter = new TokenBucket(40, 40);
@@ -121,7 +127,7 @@ export class BinanceRestClient {
     return rows.filter((r) => Number(r.positionAmt) !== 0).map((r) => ({ symbol: r.symbol!, side: Number(r.positionAmt) > 0 ? "Long" : "Short", size: Math.abs(Number(r.positionAmt)), entryPrice: Number(r.entryPrice), markPrice: Number(r.markPrice), unrealizedPnl: Number(r.unRealizedProfit), leverage: Number(r.leverage), liquidationPrice: Number(r.liquidationPrice) }));
   }
   async candles(symbol: string, interval: string, limit: number): Promise<OHLCVCandle[]> {
-    const rows = await this.publicGet<unknown[][]>("/fapi/v1/klines", { symbol, interval: /^\d+$/.test(interval) ? `${interval}m` : interval, limit: String(limit) });
+    const rows = await this.publicGet<unknown[][]>("/fapi/v1/klines", { symbol, interval: toBinanceInterval(interval), limit: String(limit) });
     return rows.map((r) => ({
       symbol, interval, openTime: Number(r[0]), open: Number(r[1]), high: Number(r[2]),
       low: Number(r[3]), close: Number(r[4]), volume: Number(r[5]), closeTime: Number(r[6]),
