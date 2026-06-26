@@ -37,6 +37,7 @@ export class MarketDataStore {
   }
 
   setTicker(ticker: Ticker): void {
+    if (!Number.isFinite(ticker.price) || ticker.price <= 0) return;
     this.tickers.set(ticker.symbol, ticker);
   }
 

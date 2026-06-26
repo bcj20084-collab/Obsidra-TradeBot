@@ -23,6 +23,18 @@ export interface SignalEvaluation {
   details: Record<string, number | string | boolean | null>;
 }
 
+function isFinitePositive(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function latestValidClose(candles: Array<{ close: number }>): number | undefined {
+  for (let index = candles.length - 1; index >= 0; index -= 1) {
+    const candle = candles[index];
+    if (candle && isFinitePositive(candle.close)) return candle.close;
+  }
+  return undefined;
+}
+
 export class SignalEngine {
   constructor(
     private readonly store: MarketDataStore,
@@ -39,18 +51,33 @@ export class SignalEngine {
     const h4 = this.store.getCandles(symbol, "240");
     const m15 = this.store.getCandles(symbol, "15");
     const ticker = this.store.getTicker(symbol);
-    if (h4.length < 80 || m15.length < 60 || !ticker) {
+    const candlePrice = latestValidClose(m15);
+    const price = isFinitePositive(ticker?.price) ? ticker.price : candlePrice;
+    if (h4.length < 80 || m15.length < 60 || !isFinitePositive(price)) {
       return {
         signal: null,
         reason: "INSUFFICIENT_DATA",
-        details: { h4Candles: h4.length, m15Candles: m15.length, tickerAvailable: Boolean(ticker) },
+        details: {
+          h4Candles: h4.length,
+          m15Candles: m15.length,
+          tickerAvailable: Boolean(ticker),
+          tickerPrice: ticker?.price ?? null,
+          candlePrice: candlePrice ?? null,
+        },
       };
     }
     const h4Close = h4.map((c) => c.close);
     const ema21 = ema(h4Close, 21).at(-1)!;
     const ema55 = ema(h4Close, 55).at(-1)!;
     const adxValue = adx(h4).at(-1) ?? 0;
-    const price = ticker.price;
+    if (!Number.isFinite(ema21) || !Number.isFinite(ema55) || !Number.isFinite(adxValue)) {
+      return {
+        signal: null,
+        reason: "INDICATORS_NOT_READY",
+        details: { price, ema21, ema55, adx: adxValue },
+      };
+    }
+    const priceSource = isFinitePositive(ticker?.price) ? "ticker" : "last_15m_candle";
     const direction = price > ema21 && ema21 > ema55 && adxValue > 25
       ? "LONG"
       : price < ema21 && ema21 < ema55 && adxValue > 25
@@ -60,7 +87,7 @@ export class SignalEngine {
       return {
         signal: null,
         reason: "NO_TREND",
-        details: { price, ema21, ema55, adx: adxValue, requiredAdx: 25 },
+        details: { price, priceSource, ema21, ema55, adx: adxValue, requiredAdx: 25 },
       };
     }
     if (this.circuitBreaker.state.active) {
@@ -85,26 +112,48 @@ export class SignalEngine {
         details: { macdReady: Boolean(macdNow && macdPrevious), bollingerReady: Boolean(bb), atr: atrValue },
       };
     }
+    if (!Number.isFinite(atrValue) || atrValue <= 0) {
+      return {
+        signal: null,
+        reason: "INDICATORS_NOT_READY",
+        details: { direction, price, priceSource, atr: atrValue },
+      };
+    }
     if (atrValue / price >= 0.03) {
       return {
         signal: null,
         reason: "VOLATILITY_TOO_HIGH",
-        details: { direction, price, atr: atrValue, atrPct: (atrValue / price) * 100, maximumAtrPct: 3 },
+        details: { direction, price, priceSource, atr: atrValue, atrPct: (atrValue / price) * 100, maximumAtrPct: 3 },
       };
     }
-    let baseScore = 0;
-    if (direction === "LONG" ? rsiValue < 35 : rsiValue > 65) baseScore += 33;
+    let baseScore = 30;
     const crossover = direction === "LONG"
       ? macdPrevious.macd <= macdPrevious.signal && macdNow.macd > macdNow.signal
       : macdPrevious.macd >= macdPrevious.signal && macdNow.macd < macdNow.signal;
-    if (crossover) baseScore += 33;
+    const macdAligned = direction === "LONG"
+      ? macdNow.histogram > 0 || macdNow.macd > macdNow.signal
+      : macdNow.histogram < 0 || macdNow.macd < macdNow.signal;
+    const rsiContinuation = direction === "LONG"
+      ? rsiValue >= 38 && rsiValue <= 68
+      : rsiValue >= 32 && rsiValue <= 62;
+    const rsiPullback = direction === "LONG" ? rsiValue < 45 : rsiValue > 55;
+    const trendStrengthScore = Math.min(15, Math.max(0, ((adxValue - 25) / 20) * 15));
+    baseScore += trendStrengthScore;
+    if (rsiContinuation) baseScore += rsiPullback ? 20 : 14;
+    else if (direction === "LONG" ? rsiValue < 35 : rsiValue > 65) baseScore += 16;
+    if (crossover) baseScore += 22;
+    else if (macdAligned) baseScore += 14;
     const bandDistance = (bb.upper - bb.lower) * 0.1;
-    if (direction === "LONG" ? price <= bb.lower + bandDistance : price >= bb.upper - bandDistance) baseScore += 34;
-    if (direction === "LONG" && ticker.fundingRate > 0.0005) {
+    const nearEntryBand = direction === "LONG" ? price <= bb.lower + bandDistance : price >= bb.upper - bandDistance;
+    const notChasing = direction === "LONG" ? price < bb.upper - bandDistance : price > bb.lower + bandDistance;
+    if (nearEntryBand) baseScore += 18;
+    else if (notChasing) baseScore += 10;
+    const fundingRate = ticker?.fundingRate ?? 0;
+    if (direction === "LONG" && fundingRate > 0.0005) {
       return {
         signal: null,
         reason: "FUNDING_FILTER",
-        details: { direction, fundingRate: ticker.fundingRate, maximumFundingRate: 0.0005 },
+        details: { direction, fundingRate, maximumFundingRate: 0.0005 },
       };
     }
     const now = new Date();
@@ -139,7 +188,7 @@ export class SignalEngine {
       hourSin: Math.sin((2 * Math.PI * now.getUTCHours()) / 24),
       hourCos: Math.cos((2 * Math.PI * now.getUTCHours()) / 24),
       dayOfWeek,
-      fundingRateNorm: (ticker.fundingRate + 0.001) / 0.002,
+      fundingRateNorm: (fundingRate + 0.001) / 0.002,
       recentWinRate,
       recentProfitFactor,
     };
@@ -171,16 +220,20 @@ export class SignalEngine {
     const evaluationDetails = {
       direction,
       price,
+      priceSource,
       score: Math.round(score),
       minimumScore: config.minSignalScore,
-      baseScore,
+      baseScore: Math.round(baseScore),
       mlAdjustment,
       regime,
       rsi: rsiValue,
       adx: adxValue,
       atr: atrValue,
-      fundingRate: ticker.fundingRate,
+      fundingRate,
       macdCrossover: crossover,
+      macdAligned,
+      rsiContinuation,
+      nearEntryBand,
       recentWinRate,
       recentProfitFactor,
     };

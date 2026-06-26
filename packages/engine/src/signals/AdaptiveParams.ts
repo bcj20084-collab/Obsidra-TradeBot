@@ -10,14 +10,21 @@ const DEFAULTS: AdaptiveConfig = {
 };
 
 export class AdaptiveParams {
-  private config: AdaptiveConfig = { ...DEFAULTS };
+  private readonly baseConfig: AdaptiveConfig;
+  private config: AdaptiveConfig;
   private regime: MarketRegime = "NORMAL";
 
-  constructor(private readonly symbol = "ALL") {}
+  constructor(private readonly symbol = "ALL", minSignalScore = DEFAULTS.minSignalScore) {
+    this.baseConfig = {
+      ...DEFAULTS,
+      minSignalScore: Math.min(85, Math.max(55, minSignalScore)),
+    };
+    this.config = { ...this.baseConfig };
+  }
 
   async update(atrValue: number, averageAtr: number, adxValue: number, drawdownPct: number): Promise<void> {
     let regime: MarketRegime = "NORMAL";
-    const next = { ...DEFAULTS };
+    const next = { ...this.baseConfig };
     if (drawdownPct > 5) {
       regime = "DRAWDOWN_MODE";
       next.maxPositionPct = 1;

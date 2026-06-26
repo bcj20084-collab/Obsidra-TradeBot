@@ -103,10 +103,26 @@ function contextKey(exchange: ExchangeId, symbol: string): string {
   return `${exchange}:${symbol}`;
 }
 
+function formatMaybeNumber(value: unknown, digits = 2): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "n/a";
+}
+
+function describeSkippedSignal(reason: string, details: Record<string, unknown>): string {
+  const parts = [
+    reason,
+    `Price: ${formatMaybeNumber(details.price, 4)}${details.priceSource ? ` (${String(details.priceSource)})` : ""}`,
+  ];
+  if (typeof details.score === "number") parts.push(`Score: ${formatMaybeNumber(details.score, 0)}/${formatMaybeNumber(details.minimumScore, 0)}`);
+  if (typeof details.adx === "number") parts.push(`ADX: ${formatMaybeNumber(details.adx, 1)}`);
+  if (typeof details.rsi === "number") parts.push(`RSI: ${formatMaybeNumber(details.rsi, 1)}`);
+  if (typeof details.baseScore === "number") parts.push(`Base: ${formatMaybeNumber(details.baseScore, 0)}`);
+  return parts.join(" | ");
+}
+
 function createContext(exchange: ExchangeId, symbol: string): TradingContext {
   const adapter = exchanges.get(exchange);
   const store = marketStores.get(exchange)!;
-  const adaptive = new AdaptiveParams(symbol);
+  const adaptive = new AdaptiveParams(symbol, env.MIN_SIGNAL_SCORE);
   const circuitBreaker = new CircuitBreaker();
   const ml = new MLScorer(symbol);
   const preflight = new PreFlightCheck(adapter, env.SPREAD_MAX_PCT);
@@ -186,6 +202,11 @@ async function bootstrap(): Promise<void> {
     update: { status, reason: env.PAPER_TRADING ? "Paper trading startup" : "Live startup" },
   });
   await prisma.botEvent.create({ data: { type: "STARTED", message: `Engine started (${env.PAPER_TRADING ? "paper" : "live"})` } });
+  startupStage = "telegram_initialize";
+  premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
+  await telegram.initialize().catch((error) => {
+    log.warn({ error }, "Telegram initialization failed; engine will continue");
+  });
   startupStage = "ml_initialize";
   premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await Promise.all([...contexts.values()].map((context) => context.ml.initialize()));
@@ -259,11 +280,11 @@ async function bootstrap(): Promise<void> {
   ]);
   if (telegram.configured) {
     await telegram.send([
-      "🤖 <b>OBSIDRA STARTED</b>",
+      "\u{1F916} <b>OBSIDRA STARTED</b>",
       `Environment: <b>${env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"}</b>`,
       `Symbols: <b>${symbols.join(", ")}</b>`,
       `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
-      "Status: <b>RUNNING ✅</b>",
+      "Status: <b>RUNNING \u{2705}</b>",
     ].join("\n")).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
   }
 }
@@ -425,7 +446,7 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
         : `SCAN | ${symbol}`,
       evaluation.signal
         ? `Confidence: ${(evaluation.signal.confidence * 100).toFixed(1)}% | Entry: $${evaluation.signal.entryPrice.toFixed(4)} | Score: ${evaluation.signal.score}/100`
-        : `${evaluation.reason} | Price: ${String(evaluation.details.price ?? "n/a")} | Score: ${String(evaluation.details.score ?? "n/a")}`,
+        : describeSkippedSignal(evaluation.reason, evaluation.details),
     );
     const signal = evaluation.signal;
     if (!signal) return;
@@ -474,6 +495,11 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     if (exchangeError) {
       operatorLog("WARNING", `EXCHANGE ERROR | ${exchange.toUpperCase()}:${symbol}`, `${error.code}: ${error.message} | next candle will retry`);
       log.warn({ error, exchange, symbol }, "evaluation skipped because exchange is unavailable");
+      await telegram.alert(
+        `Exchange error: ${exchange.toUpperCase()}`,
+        `${symbol}: ${error.message}. Botul rămâne online și va reîncerca.`,
+        `${exchange}:${error.code}`,
+      ).catch((telegramError) => log.warn({ error: telegramError }, "Telegram exchange alert failed"));
     } else {
       status = "ERROR";
       context.circuitBreaker.trip(String(error));

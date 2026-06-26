@@ -71,4 +71,41 @@ describe("SignalEngine diagnostics", () => {
     expect(result.signal).toBeNull();
     expect(result.reason).toBe("NO_TREND");
   });
+
+  it("falls back to the latest 15m candle when ticker price is unavailable", async () => {
+    const store = new MarketDataStore();
+    for (let index = 0; index < 80; index++) {
+      store.addCandle({
+        symbol: "BTCUSDT",
+        timeframe: "240",
+        openTime: index,
+        closeTime: index + 1,
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100,
+        volume: 1,
+        confirmed: true,
+      });
+    }
+    for (let index = 0; index < 60; index++) {
+      store.addCandle({
+        symbol: "BTCUSDT",
+        timeframe: "15",
+        openTime: index,
+        closeTime: index + 1,
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100,
+        volume: 1,
+        confirmed: true,
+      });
+    }
+
+    const result = await engineWith(store).evaluateDetailed("BTCUSDT");
+    expect(result.signal).toBeNull();
+    expect(result.reason).toBe("NO_TREND");
+    expect(result.details).toMatchObject({ price: 100, priceSource: "last_15m_candle" });
+  });
 });

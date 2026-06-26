@@ -163,11 +163,15 @@ export class BybitWebSocket extends EventEmitter<Events> {
         this.store.addCandle(candle);
         this.emit("kline", candle);
       } else if (message.topic.startsWith("tickers.")) {
+        const symbol = String(row.symbol ?? message.topic.split(".").at(-1));
+        const previous = this.store.getTicker(symbol);
+        const price = Number(row.lastPrice ?? previous?.price);
+        if (!Number.isFinite(price) || price <= 0) return;
         const ticker: Ticker = {
-          symbol: String(row.symbol ?? message.topic.split(".").at(-1)),
-          price: Number(row.lastPrice),
-          fundingRate: Number(row.fundingRate ?? 0),
-          openInterest: Number(row.openInterest ?? 0),
+          symbol,
+          price,
+          fundingRate: Number(row.fundingRate ?? previous?.fundingRate ?? 0),
+          openInterest: Number(row.openInterest ?? previous?.openInterest ?? 0),
           timestamp: message.ts ?? Date.now(),
         };
         this.store.setTicker(ticker);
