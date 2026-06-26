@@ -138,10 +138,21 @@ function errorSummary(value: unknown): string {
   if (value instanceof Error) return value.message;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
+    const details = [
+      typeof record.credentialSource === "string" ? `credential=${record.credentialSource}` : "",
+      typeof record.httpStatus === "number" ? `http=${record.httpStatus}` : "",
+      typeof record.hasFallback === "boolean" ? `fallback=${record.hasFallback ? "yes" : "no"}` : "",
+      typeof record.path === "string" ? `path=${record.path}` : "",
+    ].filter(Boolean);
     const candidate = record.error ?? record.err;
-    if (candidate instanceof Error) return candidate.message;
-    if (candidate && typeof candidate === "object" && "message" in candidate) return cleanOperatorText((candidate as { message?: unknown }).message);
-    if (typeof record.reason === "string") return record.reason;
+    const message = candidate instanceof Error
+      ? candidate.message
+      : candidate && typeof candidate === "object" && "message" in candidate
+        ? cleanOperatorText((candidate as { message?: unknown }).message)
+        : typeof record.reason === "string"
+          ? record.reason
+          : "";
+    return [...details, message].filter(Boolean).join(" | ");
   }
   return "";
 }
