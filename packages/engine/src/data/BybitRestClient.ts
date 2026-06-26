@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { AppError, ErrorCode, errorMessage, moduleLogger } from "@obsidra/shared";
 import { TokenBucket } from "./TokenBucket.js";
 import { ApiKeyManager, type ApiCredential } from "../security/ApiKeyManager.js";
@@ -20,6 +20,7 @@ export interface PlaceOrderRequest {
 const RETRYABLE_CODES = new Set([10006, 10016]);
 const FATAL_CODES = new Set([10003, 10004, 110007, 110014, 110025]);
 const WARN_CODES = new Set([110017]);
+const TIME_SYNC_TTL_MS = 5 * 60 * 1_000;
 
 interface BybitEnvelope<T> {
   retCode: number;
@@ -62,6 +63,8 @@ export class BybitRestClient {
   private lastHeartbeat = 0;
   private readonly baseUrl: string;
   private readonly keys: ApiKeyManager;
+  private timeOffsetMs = 0;
+  private timeOffsetSyncedAt = 0;
 
   constructor(
     apiKey: string,
@@ -228,6 +231,29 @@ export class BybitRestClient {
     return json;
   }
 
+  async syncServerTime(): Promise<number> {
+    if (Date.now() - this.timeOffsetSyncedAt < TIME_SYNC_TTL_MS) return this.timeOffsetMs;
+    try {
+      const startedAt = Date.now();
+      const response = await fetch(`${this.baseUrl}/v5/market/time`);
+      const receivedAt = Date.now();
+      if (!response.ok) return this.timeOffsetMs;
+      const json = await response.json() as {
+        result?: { timeNano?: string; timeSecond?: string };
+        time?: number;
+      };
+      const serverTime = this.parseServerTime(json);
+      if (!serverTime) return this.timeOffsetMs;
+      const localMidpoint = Math.round((startedAt + receivedAt) / 2);
+      this.timeOffsetMs = serverTime - localMidpoint;
+      this.timeOffsetSyncedAt = receivedAt;
+      return this.timeOffsetMs;
+    } catch (error) {
+      log.warn({ error }, "Bybit server time sync failed; using local clock");
+      return this.timeOffsetMs;
+    }
+  }
+
   private async privateRequest<T = unknown>(
     method: "GET" | "POST",
     path: string,
@@ -239,7 +265,8 @@ export class BybitRestClient {
     const url = method === "GET" ? `${this.baseUrl}${path}?${body}` : `${this.baseUrl}${path}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const attemptTimestamp = Date.now().toString();
+        const timeOffsetMs = await this.syncServerTime();
+        const attemptTimestamp = Math.round(Date.now() + timeOffsetMs).toString();
         let lastPermanentAuthError: AppError | undefined;
         for (let credentialIndex = 0; credentialIndex < this.keys.credentialCount(); credentialIndex += 1) {
           try {
@@ -293,19 +320,23 @@ export class BybitRestClient {
     receiveWindow: string,
   ): Promise<BybitEnvelope<T>> {
     return this.keys.withCredentialAt(credentialIndex, async (credential) => {
+      const keyFingerprint = this.fingerprint(credential.apiKey);
       const signature = createHmac("sha256", credential.apiSecret)
         .update(`${timestamp}${credential.apiKey}${receiveWindow}${body}`)
         .digest("hex");
+      const headers: Record<string, string> = {
+        "Accept": "application/json",
+        "X-BAPI-API-KEY": credential.apiKey,
+        "X-BAPI-SIGN": signature,
+        "X-BAPI-SIGN-TYPE": "2",
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": receiveWindow,
+        "cdn-request-id": randomUUID(),
+      };
+      if (method === "POST") headers["Content-Type"] = "application/json";
       const response = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          "X-BAPI-API-KEY": credential.apiKey,
-          "X-BAPI-SIGN": signature,
-          "X-BAPI-SIGN-TYPE": "2",
-          "X-BAPI-TIMESTAMP": timestamp,
-          "X-BAPI-RECV-WINDOW": receiveWindow,
-        },
+        headers,
         ...(method === "POST" ? { body } : {}),
       });
       this.lastHeartbeat = Date.now();
@@ -318,6 +349,11 @@ export class BybitRestClient {
           throw new AppError(error.code, error.message, {
             ...error.context,
             credentialSource: credential.source,
+            credentialKeyFingerprint: keyFingerprint,
+            credentialKeyLength: credential.apiKey.length,
+            bybitHost: new URL(this.baseUrl).hostname,
+            timestampOffsetMs: this.timeOffsetMs,
+            authHint: this.authHint(response.status),
             httpStatus: response.status,
           }, { cause: error });
         }
@@ -326,6 +362,10 @@ export class BybitRestClient {
       const context = {
         retCode: json.retCode,
         credentialSource: credential.source,
+        credentialKeyFingerprint: keyFingerprint,
+        credentialKeyLength: credential.apiKey.length,
+        bybitHost: new URL(this.baseUrl).hostname,
+        timestampOffsetMs: this.timeOffsetMs,
         httpStatus: response.status,
       };
       if (response.status === 429 || [500, 502, 503, 504].includes(response.status) || RETRYABLE_CODES.has(json.retCode)) {
@@ -354,5 +394,27 @@ export class BybitRestClient {
       query.set(key, String(value));
     }
     return query.toString();
+  }
+
+  private parseServerTime(json: { result?: { timeNano?: string; timeSecond?: string }; time?: number }): number | null {
+    const nano = json.result?.timeNano;
+    if (nano && /^\d+$/.test(nano)) return Math.round(Number(nano) / 1_000_000);
+    const second = json.result?.timeSecond;
+    if (second && /^\d+$/.test(second)) return Number(second) * 1_000;
+    return typeof json.time === "number" && Number.isFinite(json.time) ? json.time : null;
+  }
+
+  private fingerprint(value: string): string {
+    return createHash("sha256").update(value).digest("hex").slice(0, 10);
+  }
+
+  private authHint(status: number): string {
+    if (status === 401) {
+      return "Bybit rejected the request before returning JSON. Most common causes: key/secret mismatch, key copied from Mainnet/Testnet instead of Demo Trading, missing derivatives permissions, or IP whitelist blocking Railway.";
+    }
+    if (status === 403) {
+      return "Bybit refused access. Check account region restrictions and IP whitelist.";
+    }
+    return "Check Bybit API environment and credentials.";
   }
 }
