@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { hasSession, login, trpc } from "./lib/api";
-import type { Metrics, Trade } from "./lib/types";
+import type { Metrics, SignalFeedItem, Trade } from "./lib/types";
 import { Overview } from "./pages/Overview";
 import { Settings } from "./pages/Settings";
 import { Strategy } from "./pages/Strategy";
@@ -54,6 +54,7 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [signals, setSignals] = useState<SignalFeedItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState("");
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
@@ -61,12 +62,14 @@ export default function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [nextMetrics, nextTrades] = await Promise.all([
+      const [nextMetrics, nextTrades, nextSignals] = await Promise.all([
         trpc.query("metrics.live") as Promise<Metrics>,
         trpc.query("trades.list", { limit: 100, offset: 0 }) as Promise<Trade[]>,
+        trpc.query("signals.feed", { limit: 40 }) as Promise<SignalFeedItem[]>,
       ]);
       setMetrics(nextMetrics);
       setTrades(nextTrades);
+      setSignals(nextSignals);
       setConnectionError("");
       setLastRefreshAt(new Date());
     } catch {
@@ -176,7 +179,7 @@ export default function App() {
         </div>
 
         <Routes>
-          <Route path="/" element={<Overview metrics={metrics} trades={trades} />} />
+          <Route path="/" element={<Overview metrics={metrics} trades={trades} signals={signals} />} />
           <Route path="/trades" element={<Trades trades={trades} />} />
           <Route path="/strategy" element={<Strategy metrics={metrics} />} />
           <Route path="/strategies" element={<Strategies />} />

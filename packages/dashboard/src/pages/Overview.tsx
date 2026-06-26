@@ -1,13 +1,15 @@
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap } from "lucide-react";
-import type { Metrics, Trade } from "../lib/types";
+import type { Metrics, SignalFeedItem, Trade } from "../lib/types";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
+import { SignalFeed } from "../components/SignalFeed";
 import { TopBotParity } from "../components/TopBotParity";
 import { TradeTable } from "../components/TradeTable";
 
-export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[] }) {
+export function Overview({ metrics, trades, signals }: { metrics: Metrics; trades: Trade[]; signals: SignalFeedItem[] }) {
   const equity = 10_000 + metrics.totalPnlUsdt;
   const openTrades = trades.filter((trade) => ["OPEN", "FILLED", "CLOSING"].includes(trade.status));
+  const openPositions = metrics.openPositionsCount ?? openTrades.length;
   const closedTrades = trades.filter((trade) => trade.status === "CLOSED");
   const latestTrade = trades[0];
   const pnlPositive = metrics.totalPnlUsdt >= 0;
@@ -36,7 +38,7 @@ export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[
             <HeroStat label="Equity" value={`$${equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={Target} />
             <HeroStat label="Bot status" value={metrics.botStatus} icon={Bot} tone={metrics.botStatus === "RUNNING" ? "good" : "warn"} />
             <HeroStat label="Regime" value={metrics.marketRegime} icon={Radar} />
-            <HeroStat label="Open trades" value={String(openTrades.length)} icon={Zap} />
+            <HeroStat label="Open trades" value={String(openPositions)} icon={Zap} />
           </div>
         </div>
 
@@ -75,8 +77,9 @@ export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[
           <div className="glass-card">
             <div className="label">Signal engine</div>
             <div className="mt-5 grid grid-cols-2 gap-4">
-              <MiniStat label="Signals/trades 24h" value={String(metrics.tradesLast24h)} />
-              <MiniStat label="Total trades" value={String(metrics.totalTrades)} />
+              <MiniStat label="Signals ready 24h" value={String(metrics.signalsGenerated24h ?? 0)} />
+              <MiniStat label="Skipped/rejected 24h" value={String(metrics.signalsRejected24h ?? 0)} />
+              <MiniStat label="Exposure" value={`${(metrics.totalExposureUsdt ?? 0).toFixed(2)} USDT`} />
               <MiniStat label="Profit factor" value={metrics.profitFactor.toFixed(2)} />
               <MiniStat label="Fees" value={`${metrics.totalFeesPaidUsdt.toFixed(2)} USDT`} />
             </div>
@@ -115,6 +118,8 @@ export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[
         </div>
         <TradeTable trades={trades.slice(0, 8)} compact />
       </section>
+
+      <SignalFeed items={signals} />
 
       <TopBotParity />
     </div>

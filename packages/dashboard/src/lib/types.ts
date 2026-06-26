@@ -9,6 +9,10 @@ export interface Metrics {
   tradesLast24h: number;
   totalTrades: number;
   totalFeesPaidUsdt: number;
+  signalsGenerated24h?: number;
+  signalsRejected24h?: number;
+  totalExposureUsdt?: number;
+  openPositionsCount?: number;
   botStatus: "RUNNING" | "PAUSED" | "STOPPED" | "ERROR";
   marketRegime: string;
   equityCurve: Array<{ date: string; equity: number }>;
@@ -42,4 +46,22 @@ export interface AuditEntry {
   details: unknown;
   ipAddress: string | null;
   createdAt: string;
+}
+
+export interface SignalFeedItem {
+  id: string;
+  type: string;
+  createdAt: string;
+  symbol: string;
+  exchange: string;
+  direction: string;
+  status: string | null;
+  score: number | null;
+  confidence: number | null;
+  reason: string;
+  price: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  regime: string;
+  details: Record<string, unknown>;
 }

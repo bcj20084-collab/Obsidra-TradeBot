@@ -128,16 +128,18 @@ export class TelegramNotifier {
     const action = signal.direction === "LONG" ? "BUY" : "SELL";
     const stopPct = Math.abs((signal.stopLoss - signal.entryPrice) / signal.entryPrice) * 100;
     const targetPct = Math.abs((signal.takeProfit - signal.entryPrice) / signal.entryPrice) * 100;
+    const riskReward = targetPct / Math.max(stopPct, Number.EPSILON);
     return this.send([
-      `${signal.direction === "LONG" ? ICON.buy : ICON.sell} <b>${action} | ${escapeTelegramHtml(symbol)}</b>`,
-      `Confidence: <b>${(signal.confidence * 100).toFixed(1)}%</b>`,
+      `${signal.direction === "LONG" ? ICON.buy : ICON.sell} <b>${action} | ${escapeTelegramHtml(symbol)} | PAPER</b>`,
+      `Confidence: <b>${(signal.confidence * 100).toFixed(1)}%</b> | Score: <b>${signal.score}/100</b>`,
       `Entry: <b>$${formatTelegramPrice(signal.entryPrice)}</b>`,
       `HTF Trend: <b>${signal.direction === "LONG" ? `bullish ${ICON.up}` : `bearish ${ICON.down}`}</b>`,
       `Market Regime: <b>${escapeTelegramHtml(signal.regime)}</b>`,
       `Stop Loss: <b>$${formatTelegramPrice(signal.stopLoss)} (${stopPct.toFixed(2)}%)</b>`,
       `Take Profit: <b>$${formatTelegramPrice(signal.takeProfit)} (${targetPct.toFixed(2)}%)</b>`,
+      `Risk/Reward: <b>${riskReward.toFixed(2)}R</b>`,
       `Position: <b>${size.toFixed(2)} USDT | ${leverage}x</b>`,
-      `Signal Score: <b>${signal.score}/100</b>`,
+      `Protections: <b>TP/SL + Breakeven + Trailing + Timeout</b>`,
     ].join("\n"), {
       dedupeKey: `open:${symbol}:${signal.direction}:${signal.timestamp ?? signal.entryPrice}`,
       dedupeMs: 24 * 60 * 60_000,
@@ -154,6 +156,7 @@ export class TelegramNotifier {
       `PnL: <b>${formatSigned(trade.pnlUsdt)} USDT (${formatSigned(trade.pnlPct)}%)</b>`,
       `Reason: <b>${escapeTelegramHtml(trade.reason)}</b>`,
       `Duration: <b>${trade.holdTimeMinutes.toFixed(0)} min</b>`,
+      `Mode: <b>PAPER</b>`,
     ].join("\n"), {
       dedupeKey: `close:${trade.symbol}:${trade.entryPrice}:${trade.exitPrice}:${trade.reason}`,
       dedupeMs: 24 * 60 * 60_000,

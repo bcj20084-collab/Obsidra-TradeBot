@@ -89,6 +89,10 @@ const coordinator = new StrategyCoordinator(env.ALLOW_SAME_SYMBOL_HEDGE, env.POR
 let status: BotStatus = "RUNNING";
 const processing = new Set<string>();
 const closeWatchers = new Set<string>();
+const paperProtectionProcessing = new Set<string>();
+const PAPER_PROTECTION_INTERVAL_MS = 15_000;
+const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
+const PAPER_TRAILING_STOP_PCT = 1.5;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -261,6 +265,8 @@ async function bootstrap(): Promise<void> {
     setInterval(() => void logEngineHeartbeat(), env.ENGINE_LOG_HEARTBEAT_SECONDS * 1_000).unref();
     void logEngineHeartbeat();
   }
+  setInterval(() => void monitorPaperProtections(), PAPER_PROTECTION_INTERVAL_MS).unref();
+  void monitorPaperProtections();
   if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
     setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
   }
@@ -456,6 +462,23 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
       await context.adaptive.update(atrValue, averageAtr, adxValue, drawdown);
     }
     const evaluation = await context.signals.evaluateDetailed(symbol);
+    await journal.record(evaluation.signal ? "SIGNAL_READY" : "SIGNAL_SKIPPED", {
+      exchange,
+      symbol,
+      reason: evaluation.reason,
+      details: evaluation.details,
+      ...(evaluation.signal ? {
+        signal: {
+          direction: evaluation.signal.direction,
+          score: evaluation.signal.score,
+          confidence: evaluation.signal.confidence,
+          entryPrice: evaluation.signal.entryPrice,
+          stopLoss: evaluation.signal.stopLoss,
+          takeProfit: evaluation.signal.takeProfit,
+          regime: evaluation.signal.regime,
+        },
+      } : {}),
+    });
     premiumLog("signals", "signal_evaluated", {
       exchange,
       symbol,
@@ -629,6 +652,98 @@ async function watchTradeClose(tradeId: string, exchange: ExchangeId, symbol: st
     log.warn({ tradeId, symbol }, "watchTradeClose timed out; coordinator forcibly cleared");
   } finally {
     closeWatchers.delete(tradeId);
+  }
+}
+
+async function monitorPaperProtections(): Promise<void> {
+  const trades = await prisma.trade.findMany({
+    where: {
+      executionMode: "PAPER",
+      status: { in: ["OPEN", "FILLED"] },
+      openedAt: { not: null },
+      entryPrice: { not: null },
+    },
+    orderBy: { openedAt: "asc" },
+    take: 50,
+  });
+  for (const trade of trades) {
+    if (paperProtectionProcessing.has(trade.id)) continue;
+    paperProtectionProcessing.add(trade.id);
+    void protectPaperTrade(trade.id).finally(() => paperProtectionProcessing.delete(trade.id));
+  }
+}
+
+async function protectPaperTrade(tradeId: string): Promise<void> {
+  try {
+    const trade = await prisma.trade.findUnique({ where: { id: tradeId } });
+    if (!trade || !["OPEN", "FILLED"].includes(trade.status) || !trade.openedAt || !trade.entryPrice) return;
+    const exchange = trade.exchange as ExchangeId;
+    const context = getOrCreateContext(exchange, trade.symbol);
+    const ticker = context.store.getTicker(trade.symbol);
+    const price = ticker?.price;
+    if (!price || !Number.isFinite(price) || price <= 0) return;
+
+    const isLong = trade.direction === "LONG";
+    const hitStop = isLong ? price <= trade.stopLoss : price >= trade.stopLoss;
+    const hitTakeProfit = isLong ? price >= trade.takeProfit : price <= trade.takeProfit;
+    const timedOut = Date.now() - trade.openedAt.getTime() >= PAPER_TIMEOUT_MS;
+
+    if (hitStop) {
+      await orderManager.close(trade.id, "paper_stop_loss");
+      return;
+    }
+    if (hitTakeProfit) {
+      await orderManager.close(trade.id, "paper_take_profit");
+      return;
+    }
+    if (timedOut) {
+      await orderManager.close(trade.id, "paper_timeout_exit");
+      return;
+    }
+
+    const currentStop = trade.stopLoss;
+    const entry = trade.entryPrice;
+    const riskDistance = Math.abs(entry - currentStop);
+    if (riskDistance <= 0) return;
+    const favorableMove = isLong ? price - entry : entry - price;
+    if (favorableMove <= 0) return;
+
+    let nextStop = currentStop;
+    let reason: string | null = null;
+    const breakevenEligible = favorableMove >= riskDistance;
+    if (breakevenEligible) {
+      const breakevenStop = entry;
+      const improvesStop = isLong ? breakevenStop > nextStop : breakevenStop < nextStop;
+      if (improvesStop) {
+        nextStop = breakevenStop;
+        reason = "paper_breakeven_stop";
+      }
+    }
+
+    const trailingStop = isLong
+      ? price * (1 - PAPER_TRAILING_STOP_PCT / 100)
+      : price * (1 + PAPER_TRAILING_STOP_PCT / 100);
+    const improvesTrailing = isLong ? trailingStop > nextStop : trailingStop < nextStop;
+    if (improvesTrailing) {
+      nextStop = trailingStop;
+      reason = "paper_trailing_stop";
+    }
+
+    if (reason && Math.abs(nextStop - currentStop) / currentStop >= 0.0001) {
+      await prisma.trade.update({ where: { id: trade.id }, data: { stopLoss: nextStop } });
+      await journal.record("PAPER_PROTECTION_UPDATED", {
+        symbol: trade.symbol,
+        exchange,
+        direction: trade.direction,
+        price,
+        previousStop: currentStop,
+        nextStop,
+        reason,
+      }, trade.id);
+      operatorLog("INFO", `PAPER PROTECTION | ${trade.symbol}`, `${reason}: SL moved to $${nextStop.toFixed(4)} | price $${price.toFixed(4)}`);
+    }
+  } catch (error) {
+    log.warn({ error, tradeId }, "paper protection monitor failed");
   }
 }
 

@@ -5,8 +5,8 @@ const rows = [
   { feature: "Backtesting", topBots: "Historical simulation before launch", obsidra: "Backtest page and engine available", status: "ready" },
   { feature: "Risk controls", topBots: "SL/TP, drawdown, exposure limits", obsidra: "Risk gate, DD, exposure, daily loss", status: "ready" },
   { feature: "Bot families", topBots: "Grid, DCA, combo, trend, copy", obsidra: "Trend, Grid, DCA, Scalp, Copy modules", status: "ready" },
-  { feature: "Trailing protection", topBots: "Trailing SL, breakeven, timeout exits", obsidra: "Next priority upgrade", status: "next" },
-  { feature: "Strategy builder", topBots: "No-code rules and templates", obsidra: "Planned visual rule presets", status: "planned" },
+  { feature: "Trailing protection", topBots: "Trailing SL, breakeven, timeout exits", obsidra: "Paper TP/SL, breakeven, trailing, timeout", status: "ready" },
+  { feature: "Strategy builder", topBots: "No-code rules and templates", obsidra: "Next priority: visual rule presets", status: "next" },
   { feature: "Analytics terminal", topBots: "PnL, win-rate, fees, symbol stats", obsidra: "Cockpit dashboard live", status: "ready" },
   { feature: "Alerts", topBots: "Telegram/Discord/mobile notifications", obsidra: "Telegram and Discord hooks", status: "ready" },
 ];
