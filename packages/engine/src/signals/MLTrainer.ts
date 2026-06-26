@@ -10,13 +10,38 @@ interface TrainingRow {
   y: number;
 }
 
+export interface TrainingResult {
+  symbol: string;
+  trained: boolean;
+  savedWeights: boolean;
+  tradeCount: number;
+  datasetSize: number;
+  cvAccuracy: number | null;
+  cvLogLoss: number | null;
+  wfEfficiency: number | null;
+  reason: string;
+}
+
+const MIN_TRAINING_TRADES = 50;
+const TRAINING_COOLDOWN_MS = 30 * 60_000;
+
 export class MLTrainer {
-  async train(symbol: string): Promise<void> {
+  async train(symbol: string): Promise<TrainingResult> {
     const trades = await prisma.trade.findMany({
       where: { symbol, closedAt: { gte: new Date(Date.now() - 90 * 86_400_000) }, pnlUsdt: { not: null } },
       orderBy: { closedAt: "asc" },
     });
-    if (trades.length < 50 || trades.length % 50 !== 0) return;
+    const latestLog = await prisma.mlTrainingLog.findFirst({ where: { symbol }, orderBy: { trainedAt: "desc" } });
+    if (trades.length < MIN_TRAINING_TRADES) {
+      return skipped(symbol, trades.length, "Not enough closed trades for auto-training");
+    }
+    if (
+      latestLog &&
+      latestLog.tradeCount === trades.length &&
+      Date.now() - latestLog.trainedAt.getTime() < TRAINING_COOLDOWN_MS
+    ) {
+      return skipped(symbol, trades.length, "Already trained on current dataset recently");
+    }
 
     const dataset: TrainingRow[] = trades.flatMap((trade) => {
       const signal = trade.signalData as Record<string, unknown>;
@@ -25,14 +50,22 @@ export class MLTrainer {
       if (x.length !== ML_FEATURE_NAMES.length) return [];
       return [{ x, y: (trade.pnlUsdt ?? 0) > 0 ? 1 : 0 }];
     });
-    if (dataset.length < 50) return;
+    if (dataset.length < MIN_TRAINING_TRADES) {
+      return skipped(symbol, trades.length, "Closed trades do not contain enough ML feature vectors", dataset.length);
+    }
 
     const trained = trainLogistic(dataset);
     const validation = crossValidate(dataset, 5);
     const latest = await prisma.mlWeights.findFirst({ where: { symbol }, orderBy: { trainedAt: "desc" } });
     const wfEfficiency = walkForwardEfficiency([validation.profitFactor], [validation.outOfSampleProfitFactor]);
-    const save = validation.accuracy > 0.52 && (!latest?.cvLogLoss || validation.logLoss < latest.cvLogLoss);
+    const improvesLogLoss = !latest?.cvLogLoss || validation.logLoss < latest.cvLogLoss;
+    const save = validation.accuracy > 0.52 && improvesLogLoss;
     const importance = Object.fromEntries(ML_FEATURE_NAMES.map((name, index) => [name, Math.abs(trained.weights[index] ?? 0)]));
+    const rejectReason = !save
+      ? validation.accuracy <= 0.52
+        ? "Validation accuracy below 52%"
+        : "Model did not improve log-loss"
+      : null;
 
     if (save) {
       await prisma.mlWeights.create({
@@ -57,11 +90,37 @@ export class MLTrainer {
         wfEfficiency,
         featureImportance: importance,
         savedWeights: save,
-        ...(!save ? { rejectReason: "Validation thresholds not met" } : {}),
+        ...(rejectReason ? { rejectReason } : {}),
       },
     });
-    log.info({ symbol, accuracy: validation.accuracy, logLoss: validation.logLoss, saved: save }, "ML training completed");
+    log.info({ symbol, accuracy: validation.accuracy, logLoss: validation.logLoss, saved: save, tradeCount: trades.length }, "ML auto-training completed");
+    return {
+      symbol,
+      trained: true,
+      savedWeights: save,
+      tradeCount: trades.length,
+      datasetSize: dataset.length,
+      cvAccuracy: validation.accuracy,
+      cvLogLoss: validation.logLoss,
+      wfEfficiency,
+      reason: rejectReason ?? "New model weights saved",
+    };
   }
+}
+
+function skipped(symbol: string, tradeCount: number, reason: string, datasetSize = 0): TrainingResult {
+  log.info({ symbol, tradeCount, datasetSize, reason }, "ML auto-training skipped");
+  return {
+    symbol,
+    trained: false,
+    savedWeights: false,
+    tradeCount,
+    datasetSize,
+    cvAccuracy: null,
+    cvLogLoss: null,
+    wfEfficiency: null,
+    reason,
+  };
 }
 
 function trainLogistic(dataset: TrainingRow[]) {

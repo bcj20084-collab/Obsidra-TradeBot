@@ -93,6 +93,7 @@ const paperProtectionProcessing = new Set<string>();
 const PAPER_PROTECTION_INTERVAL_MS = 15_000;
 const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
 const PAPER_TRAILING_STOP_PCT = 1.5;
+const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -238,6 +239,7 @@ async function bootstrap(): Promise<void> {
   startupStage = "ml_initialize";
   premiumLog("engine", "startup_stage", { stage: startupStage }, "info", `Engine startup: ${startupStage}`);
   await Promise.all([...contexts.values()].map((context) => context.ml.initialize()));
+  void runAutoTraining("startup");
   const reconciliationSymbols = [...new Set([
     ...symbols,
     ...activeDescriptors.filter((descriptor) => descriptor.symbol !== "MULTI").map((descriptor) => descriptor.symbol),
@@ -270,10 +272,7 @@ async function bootstrap(): Promise<void> {
   if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
     setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
   }
-  setInterval(() => void Promise.all([...new Set([...contexts.values()].map((context) => context.symbol))].map(async (symbol) => {
-    await trainer.train(symbol);
-    await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
-  })), 3_600_000).unref();
+  setInterval(() => void runAutoTraining("scheduled"), AUTO_TRAINING_INTERVAL_MS).unref();
   setInterval(() => void Promise.all(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol))), 60_000).unref();
   websocket.on("fatal_disconnect", () => {
     status = "ERROR";
@@ -652,6 +651,52 @@ async function watchTradeClose(tradeId: string, exchange: ExchangeId, symbol: st
     log.warn({ tradeId, symbol }, "watchTradeClose timed out; coordinator forcibly cleared");
   } finally {
     closeWatchers.delete(tradeId);
+  }
+}
+
+async function runAutoTraining(trigger: "startup" | "scheduled" | "manual" = "scheduled"): Promise<void> {
+  const uniqueSymbols = [...new Set([...contexts.values()].map((context) => context.symbol))];
+  for (const symbol of uniqueSymbols) {
+    try {
+      const result = await trainer.train(symbol);
+      await journal.record(result.trained ? "ML_TRAINING_COMPLETED" : "ML_TRAINING_SKIPPED", {
+        trigger,
+        symbol,
+        savedWeights: result.savedWeights,
+        tradeCount: result.tradeCount,
+        datasetSize: result.datasetSize,
+        cvAccuracy: result.cvAccuracy,
+        cvLogLoss: result.cvLogLoss,
+        wfEfficiency: result.wfEfficiency,
+        reason: result.reason,
+      });
+      await prisma.botEvent.create({
+        data: {
+          type: result.trained ? "ML_TRAINING_COMPLETED" : "ML_TRAINING_SKIPPED",
+          symbol,
+          message: result.trained
+            ? `Auto-training completed for ${symbol}: accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}%, saved=${result.savedWeights}`
+            : `Auto-training skipped for ${symbol}: ${result.reason}`,
+          data: { trigger, ...result },
+        },
+      });
+      if (result.savedWeights) {
+        await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
+        operatorLog("INFO", `AI TRAINING | ${symbol}`, `New ML model loaded | accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}% | trades ${result.tradeCount}`);
+        if (telegram.configured) {
+          await telegram.alert(
+            "AI auto-training updated",
+            `${symbol}: model nou incarcat | accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}% | trades ${result.tradeCount}`,
+            `ml-training:${symbol}:${result.tradeCount}`,
+          );
+        }
+      } else if (result.trained) {
+        operatorLog("INFO", `AI TRAINING | ${symbol}`, `Model tested but not saved | ${result.reason} | accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}%`);
+      }
+    } catch (error) {
+      log.warn({ error, symbol, trigger }, "ML auto-training failed");
+      await journal.record("ML_TRAINING_FAILED", { trigger, symbol, error: error instanceof Error ? error.message : String(error) });
+    }
   }
 }
 

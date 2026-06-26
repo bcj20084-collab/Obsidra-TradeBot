@@ -13,6 +13,7 @@ export interface Metrics {
   signalsRejected24h?: number;
   totalExposureUsdt?: number;
   openPositionsCount?: number;
+  mlAccuracy?: number | null;
   botStatus: "RUNNING" | "PAUSED" | "STOPPED" | "ERROR";
   marketRegime: string;
   equityCurve: Array<{ date: string; equity: number }>;

@@ -18,6 +18,35 @@ export const configRouter = router({
   adaptiveHistory: protectedProcedure.query(() =>
     prisma.adaptiveLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
   ),
+  mlTraining: protectedProcedure.query(async () => {
+    const [latestWeights, history] = await Promise.all([
+      prisma.mlWeights.findMany({ orderBy: { trainedAt: "desc" }, take: 10 }),
+      prisma.mlTrainingLog.findMany({ orderBy: { trainedAt: "desc" }, take: 25 }),
+    ]);
+    return {
+      latestWeights: latestWeights.map((item) => ({
+        id: item.id,
+        symbol: item.symbol,
+        tradeCount: item.tradeCount,
+        cvAccuracy: item.cvAccuracy,
+        cvLogLoss: item.cvLogLoss,
+        wfEfficiency: item.wfEfficiency,
+        trainedAt: item.trainedAt.toISOString(),
+      })),
+      history: history.map((item) => ({
+        id: item.id,
+        symbol: item.symbol,
+        tradeCount: item.tradeCount,
+        cvAccuracy: item.cvAccuracy,
+        cvLogLoss: item.cvLogLoss,
+        wfEfficiency: item.wfEfficiency,
+        savedWeights: item.savedWeights,
+        rejectReason: item.rejectReason,
+        featureImportance: item.featureImportance,
+        trainedAt: item.trainedAt.toISOString(),
+      })),
+    };
+  }),
   events: protectedProcedure.query(() =>
     prisma.botEvent.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
   ),
