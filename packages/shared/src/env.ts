@@ -120,15 +120,16 @@ export const envSchema = z
     ] as const;
     const remoteBybit = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "bybit" && !(env.PAPER_TRADING || paper));
     const liveBybit = remoteBybit && !env.BYBIT_TESTNET && !env.BYBIT_DEMO;
-    const liveBinance = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "binance" && !(env.PAPER_TRADING || paper));
+    const remoteBinance = strategyModes.some(([enabled, exchange, paper]) => enabled && exchange === "binance" && !(env.PAPER_TRADING || paper));
+    const liveBinance = remoteBinance && !env.BINANCE_TESTNET;
     if (env.BYBIT_TESTNET && env.BYBIT_DEMO) {
       ctx.addIssue({ code: "custom", message: "BYBIT_TESTNET and BYBIT_DEMO cannot both be true", path: ["BYBIT_DEMO"] });
     }
     if (remoteBybit && (!(env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY) || !(env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET))) {
       ctx.addIssue({ code: "custom", message: "Remote Bybit execution requires API credentials", path: ["BYBIT_API_KEY"] });
     }
-    if (liveBinance && (!env.BINANCE_API_KEY || !env.BINANCE_API_SECRET)) {
-      ctx.addIssue({ code: "custom", message: "Live Binance strategies require API credentials", path: ["BINANCE_API_KEY"] });
+    if (remoteBinance && (!env.BINANCE_API_KEY || !env.BINANCE_API_SECRET)) {
+      ctx.addIssue({ code: "custom", message: "Remote Binance execution requires API credentials", path: ["BINANCE_API_KEY"] });
     }
     if ((liveBybit || liveBinance) && env.NODE_ENV !== "production") {
       ctx.addIssue({ code: "custom", message: "Live trading requires NODE_ENV=production", path: ["NODE_ENV"] });
@@ -145,13 +146,6 @@ export const envSchema = z
       if (modes.size > 1) {
         ctx.addIssue({ code: "custom", message: `Enabled ${exchange} strategies must use the same paper/live mode`, path: ["STRATEGY_TREND_ENABLED"] });
       }
-    }
-    if (liveBinance && env.BINANCE_TESTNET) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Disable BINANCE_TESTNET before live Binance execution",
-        path: ["BINANCE_TESTNET"],
-      });
     }
   });
 

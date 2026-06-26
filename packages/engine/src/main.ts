@@ -171,6 +171,14 @@ for (const descriptor of activeDescriptors) {
 }
 const contexts = new Map([...initialPairs].map(([key, pair]) => [key, createContext(pair.exchange, pair.symbol)]));
 
+function executionEnvironmentLabel(): string {
+  const activeRemoteBinance = activeDescriptors.some((item) => item.exchange === "binance" && !item.isPaperTrading);
+  const activeRemoteBybit = activeDescriptors.some((item) => item.exchange === "bybit" && !item.isPaperTrading);
+  if (activeRemoteBinance) return env.BINANCE_TESTNET ? "BINANCE TESTNET" : "BINANCE LIVE";
+  if (activeRemoteBybit) return env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : "BYBIT LIVE";
+  return "PAPER";
+}
+
 function getOrCreateContext(exchange: ExchangeId, symbol: string): TradingContext {
   const key = contextKey(exchange, symbol);
   const existing = contexts.get(key);
@@ -287,16 +295,17 @@ async function bootstrap(): Promise<void> {
   }, "info", "Obsidra engine started");
   operatorBlock("OBSIDRA STARTED", [
     ["Status", status],
-    ["Environment", env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"],
+    ["Environment", executionEnvironmentLabel()],
     ["Symbols", symbols.join(", ")],
     ["Strategies", activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"],
     ["Bybit credentials", bybitPaper ? "not required in PAPER" : bybitCredentialCandidates.map((item) => item.source).join(" -> ") || "missing"],
+    ["Binance credentials", binancePaper ? "not required in PAPER" : env.BINANCE_API_KEY ? "BINANCE_API_KEY" : "missing"],
     ["Telegram", telegram.configured ? "connected" : "disabled"],
   ]);
   if (telegram.configured) {
     await telegram.send([
       "\u{1F916} <b>OBSIDRA STARTED</b>",
-      `Environment: <b>${env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"}</b>`,
+      `Environment: <b>${executionEnvironmentLabel()}</b>`,
       `Symbols: <b>${symbols.join(", ")}</b>`,
       `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
       "Status: <b>RUNNING \u{2705}</b>",
