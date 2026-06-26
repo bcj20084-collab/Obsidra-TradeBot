@@ -1,18 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-obsidian: #07090e;
-  --color-panel: #10141d;
-  --color-border: #222938;
+  --color-obsidian: #05070d;
+  --color-panel: #0d111b;
+  --color-border: rgba(255, 255, 255, 0.10);
   --color-cyan: #50e3c2;
-  --shadow-glow: 0 0 40px rgba(80, 227, 194, 0.04);
+  --shadow-glow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 60px rgba(80, 227, 194, 0.055);
 }
 
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #07090e;
-  color: #f5f7fb;
+  background: #05070d;
+  color: #f7f9ff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -20,19 +22,153 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 12% 0%, rgba(80, 227, 194, 0.08), transparent 28rem),
-    radial-gradient(circle at 90% 12%, rgba(91, 124, 255, 0.08), transparent 30rem),
-    #07090e;
+    radial-gradient(circle at 10% -10%, rgba(80, 227, 194, 0.16), transparent 34rem),
+    radial-gradient(circle at 88% 0%, rgba(114, 92, 255, 0.16), transparent 34rem),
+    radial-gradient(circle at 50% 120%, rgba(255, 174, 66, 0.08), transparent 32rem),
+    linear-gradient(135deg, #05070d 0%, #080b13 48%, #05070d 100%);
+}
+
+body::before {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  content: "";
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 20%, black, transparent 72%);
 }
 
 * { box-sizing: border-box; }
 
-button, a, input { -webkit-tap-highlight-color: transparent; }
-::selection { background: rgba(80, 227, 194, 0.25); }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+::selection { background: rgba(80, 227, 194, 0.28); }
 
 @layer components {
-  .card { @apply rounded-2xl border border-border bg-panel/90 p-5 shadow-glow backdrop-blur; }
-  .label { @apply text-xs font-semibold uppercase tracking-[0.16em] text-slate-500; }
-  .button { @apply rounded-xl border border-border bg-slate-900 px-4 py-2 text-sm font-semibold transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50; }
-  .input { @apply w-full rounded-xl border border-border bg-black/20 px-3 py-2 outline-none transition focus:border-cyan; }
+  .card,
+  .glass-card {
+    @apply rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-glow backdrop-blur-xl;
+  }
+
+  .card {
+    @apply bg-panel/80;
+  }
+
+  .label {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .button {
+    @apply rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:border-cyan/40 hover:bg-cyan/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .glow-button {
+    box-shadow: 0 0 32px rgba(80, 227, 194, 0.09);
+  }
+
+  .input {
+    @apply w-full rounded-2xl border border-white/10 bg-black/30 px-3 py-2.5 text-white outline-none transition placeholder:text-slate-600 focus:border-cyan/70 focus:ring-4 focus:ring-cyan/10;
+  }
+
+  .logo-orb {
+    @apply grid h-11 w-11 place-items-center rounded-2xl border border-cyan/25 bg-cyan/10 text-lg font-black text-cyan;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 32px rgba(80,227,194,.12);
+  }
+
+  .nav-item {
+    @apply flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-400 transition hover:bg-white/[0.06] hover:text-white;
+  }
+
+  .nav-item-active {
+    @apply border border-cyan/20 bg-cyan/10 text-cyan shadow-glow;
+  }
+
+  .status-dot {
+    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-slate-300;
+  }
+
+  .status-dot span {
+    @apply h-2 w-2 rounded-full bg-slate-400;
+  }
+
+  .status-dot.is-live span {
+    @apply bg-emerald-400;
+    box-shadow: 0 0 18px rgba(52, 211, 153, .85);
+  }
+
+  .status-dot.is-warn span {
+    @apply bg-amber-300;
+    box-shadow: 0 0 18px rgba(252, 211, 77, .85);
+  }
+
+  .pill {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-black uppercase tracking-[0.13em] text-slate-300;
+  }
+
+  .pill-success {
+    @apply border-emerald-400/20 bg-emerald-400/10 text-emerald-300;
+  }
+
+  .pill-danger {
+    @apply border-rose-400/20 bg-rose-400/10 text-rose-300;
+  }
+
+  .hero-grid {
+    @apply grid gap-6 2xl:grid-cols-[1.55fr_.75fr];
+  }
+
+  .hero-card {
+    @apply overflow-hidden p-6 md:p-8;
+    background:
+      radial-gradient(circle at 18% 0%, rgba(80,227,194,.18), transparent 25rem),
+      radial-gradient(circle at 88% 10%, rgba(124,92,255,.14), transparent 24rem),
+      rgba(255,255,255,.045);
+  }
+
+  .hero-pnl {
+    @apply inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl font-black;
+  }
+
+  .metric-tile {
+    @apply rounded-3xl border border-white/10 bg-black/25 p-4;
+  }
+
+  .metric-card {
+    @apply rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-glow backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-white/[0.06];
+  }
+
+  .metric-icon {
+    @apply grid h-10 w-10 place-items-center rounded-2xl border;
+  }
+
+  .tone-cyan { @apply border-cyan/25 bg-cyan/10 text-cyan; }
+  .tone-emerald { @apply border-emerald-400/25 bg-emerald-400/10 text-emerald-300; }
+  .tone-amber { @apply border-amber-300/25 bg-amber-300/10 text-amber-300; }
+  .tone-rose { @apply border-rose-400/25 bg-rose-400/10 text-rose-300; }
+  .tone-violet { @apply border-violet-400/25 bg-violet-400/10 text-violet-300; }
+
+  .direction-badge {
+    @apply inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.16em];
+  }
+
+  .direction-long {
+    @apply bg-emerald-400/10 text-emerald-300;
+  }
+
+  .direction-short {
+    @apply bg-rose-400/10 text-rose-300;
+  }
+
+  .score-ring {
+    @apply grid h-10 w-10 place-items-center rounded-full text-xs font-black text-white;
+    background:
+      radial-gradient(circle at center, #0d111b 57%, transparent 58%),
+      conic-gradient(#50e3c2 var(--score), rgba(255,255,255,.10) 0);
+  }
+
+  .empty-state,
+  .chart-empty {
+    @apply grid min-h-[260px] place-items-center rounded-3xl border border-dashed border-white/10 bg-black/20 p-8 text-center;
+  }
 }

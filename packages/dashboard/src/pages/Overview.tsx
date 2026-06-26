@@ -1,37 +1,156 @@
+import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap } from "lucide-react";
 import type { Metrics, Trade } from "../lib/types";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
 import { TradeTable } from "../components/TradeTable";
 
 export function Overview({ metrics, trades }: { metrics: Metrics; trades: Trade[] }) {
+  const equity = 10_000 + metrics.totalPnlUsdt;
+  const openTrades = trades.filter((trade) => ["OPEN", "FILLED", "CLOSING"].includes(trade.status));
+  const closedTrades = trades.filter((trade) => trade.status === "CLOSED");
+  const latestTrade = trades[0];
+  const pnlPositive = metrics.totalPnlUsdt >= 0;
+
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-        <div>
-          <div className="label">Portfolio intelligence</div>
-          <h1 className="mt-2 text-3xl font-bold">Good evening, operator.</h1>
-          <p className="mt-2 text-slate-400">Risk-gated execution and adaptive market context in one quiet surface.</p>
-        </div>
-        <div className="card flex gap-8">
-          <div><div className="label">Equity</div><div className="mt-2 text-2xl font-bold">${(10_000 + metrics.totalPnlUsdt).toLocaleString()}</div></div>
-          <div><div className="label">PnL</div><div className={`mt-2 text-2xl font-bold ${metrics.totalPnlUsdt >= 0 ? "text-emerald-400" : "text-rose-400"}`}>{metrics.totalPnlUsdt.toFixed(2)}</div></div>
-        </div>
-      </div>
-      <MetricsCards metrics={metrics} />
-      <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
-        <div className="card"><div className="label mb-4">30 day equity curve</div><EquityCurve data={metrics.equityCurve} /></div>
-        <div className="card">
-          <div className="label">Live market</div>
-          <div className="mt-5 text-4xl font-bold">BTC/USDT</div>
-          <div className="mt-8 grid grid-cols-2 gap-4 text-sm">
-            <div><div className="text-slate-500">Regime</div><div className="mt-1 text-cyan">{metrics.marketRegime}</div></div>
-            <div><div className="text-slate-500">Status</div><div className="mt-1">{metrics.botStatus}</div></div>
-            <div><div className="text-slate-500">Trades</div><div className="mt-1">{metrics.totalTrades}</div></div>
-            <div><div className="text-slate-500">Drawdown</div><div className="mt-1">{metrics.currentDrawdown.toFixed(2)}%</div></div>
+    <div className="space-y-6">
+      <section className="hero-grid">
+        <div className="glass-card hero-card">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="label">Portfolio intelligence</div>
+              <h2 className="mt-3 max-w-3xl text-4xl font-black tracking-tight text-white md:text-5xl">
+                Paper trading cockpit for Binance market flow.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
+                Obsidra is scanning BTCUSDT and ETHUSDT, running risk checks, and simulating entries before real exchange execution is enabled.
+              </p>
+            </div>
+            <div className={`hero-pnl ${pnlPositive ? "text-emerald-300" : "text-rose-300"}`}>
+              <span>{pnlPositive ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}</span>
+              {metrics.totalPnlUsdt.toFixed(2)} USDT
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-3 md:grid-cols-4">
+            <HeroStat label="Equity" value={`$${equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={Target} />
+            <HeroStat label="Bot status" value={metrics.botStatus} icon={Bot} tone={metrics.botStatus === "RUNNING" ? "good" : "warn"} />
+            <HeroStat label="Regime" value={metrics.marketRegime} icon={Radar} />
+            <HeroStat label="Open trades" value={String(openTrades.length)} icon={Zap} />
           </div>
         </div>
-      </div>
-      <div className="card"><div className="label mb-3">Latest executions</div><TradeTable trades={trades.slice(0, 5)} /></div>
+
+        <div className="glass-card space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="label">Risk posture</div>
+              <h3 className="mt-2 text-2xl font-black">Protected</h3>
+            </div>
+            <Shield className="text-cyan" size={30} />
+          </div>
+          <RiskLine label="Current drawdown" value={`${metrics.currentDrawdown.toFixed(2)}%`} limit="8%" percent={Math.min(100, (metrics.currentDrawdown / 8) * 100)} />
+          <RiskLine label="Max drawdown" value={`${metrics.maxDrawdown.toFixed(2)}%`} limit="tracked" percent={Math.min(100, (metrics.maxDrawdown / 20) * 100)} />
+          <RiskLine label="Win rate" value={`${metrics.winRate.toFixed(1)}%`} limit="target 50%+" percent={Math.min(100, metrics.winRate)} positive />
+          <div className="rounded-2xl border border-cyan/15 bg-cyan/5 p-4 text-sm leading-6 text-slate-300">
+            Paper mode is active, so execution is simulated while signals and risk logic stay live.
+          </div>
+        </div>
+      </section>
+
+      <MetricsCards metrics={metrics} />
+
+      <section className="grid gap-6 2xl:grid-cols-[1.4fr_.8fr]">
+        <div className="glass-card">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Equity telemetry</div>
+              <h3 className="mt-2 text-2xl font-black">Performance curve</h3>
+            </div>
+            <div className="pill">30 day view</div>
+          </div>
+          <EquityCurve data={metrics.equityCurve} />
+        </div>
+
+        <div className="grid gap-6">
+          <div className="glass-card">
+            <div className="label">Signal engine</div>
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <MiniStat label="Signals/trades 24h" value={String(metrics.tradesLast24h)} />
+              <MiniStat label="Total trades" value={String(metrics.totalTrades)} />
+              <MiniStat label="Profit factor" value={metrics.profitFactor.toFixed(2)} />
+              <MiniStat label="Fees" value={`${metrics.totalFeesPaidUsdt.toFixed(2)} USDT`} />
+            </div>
+          </div>
+
+          <div className="glass-card">
+            <div className="label">Latest event</div>
+            {latestTrade ? (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xl font-black">{latestTrade.symbol}</div>
+                    <div className="text-sm text-slate-400">{latestTrade.exchange} · {latestTrade.strategyId}</div>
+                  </div>
+                  <span className={`pill ${latestTrade.direction === "LONG" ? "pill-success" : "pill-danger"}`}>{latestTrade.direction}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <MiniStat label="Entry" value={formatMoney(latestTrade.entryPrice)} />
+                  <MiniStat label="PnL" value={formatMoney(latestTrade.pnlUsdt)} />
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-slate-400">No simulated executions yet. Waiting for the next qualified signal.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="glass-card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="label">Execution tape</div>
+            <h3 className="mt-2 text-2xl font-black">Recent simulated trades</h3>
+          </div>
+          <div className="pill">{closedTrades.length} closed</div>
+        </div>
+        <TradeTable trades={trades.slice(0, 8)} compact />
+      </section>
     </div>
   );
+}
+
+function HeroStat({ label, value, icon: Icon, tone }: { label: string; value: string; icon: typeof Activity; tone?: "good" | "warn" }) {
+  return (
+    <div className="metric-tile">
+      <Icon className={tone === "good" ? "text-emerald-400" : tone === "warn" ? "text-amber-300" : "text-cyan"} size={20} />
+      <div className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 truncate text-lg font-black">{value}</div>
+    </div>
+  );
+}
+
+function RiskLine({ label, value, limit, percent, positive = false }: { label: string; value: string; limit: string; percent: number; positive?: boolean }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="text-slate-400">{label}</span>
+        <span className="font-mono text-white">{value} <span className="text-slate-600">/ {limit}</span></span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white/5">
+        <div className={`h-full rounded-full ${positive ? "bg-emerald-400" : "bg-cyan"}`} style={{ width: `${Math.max(3, Math.min(100, percent))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="label">{label}</div>
+      <div className="mt-2 font-mono text-lg font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function formatMoney(value: number | null): string {
+  return value == null ? "—" : `$${value.toFixed(2)}`;
 }
