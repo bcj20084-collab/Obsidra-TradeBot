@@ -14,4 +14,13 @@ export const symbolsRouter = router({
       return { symbol, enabled: true, pnl: stats?._sum.pnlUsdt ?? 0, trades: stats?._count ?? 0 };
     });
   }),
+  scanner: protectedProcedure.query(async () => {
+    const latest = await prisma.journalEntry.findFirst({ where: { type: "AI_MARKET_SCAN" }, orderBy: { createdAt: "desc" } });
+    const data = latest?.data as { markets?: unknown[]; best?: unknown } | undefined;
+    return {
+      updatedAt: latest?.createdAt.toISOString() ?? null,
+      best: data?.best ?? null,
+      markets: Array.isArray(data?.markets) ? data.markets : [],
+    };
+  }),
 });

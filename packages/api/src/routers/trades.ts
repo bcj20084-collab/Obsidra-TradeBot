@@ -33,4 +33,26 @@ export const tradesRouter = router({
         },
       }),
     ),
+  candles: protectedProcedure
+    .input(z.object({ id: z.string().min(1), interval: z.string().default("15"), limit: z.number().int().min(50).max(500).default(180) }))
+    .query(async ({ input }) => {
+      const trade = await prisma.trade.findUnique({ where: { id: input.id } });
+      if (!trade) return [];
+      const center = trade.openedAt ?? trade.createdAt;
+      const start = BigInt(center.getTime() - 36 * 60 * 60_000);
+      const end = BigInt((trade.closedAt ?? new Date()).getTime() + 12 * 60 * 60_000);
+      const rows = await prisma.historicalCandle.findMany({
+        where: { symbol: trade.symbol, interval: input.interval, openTime: { gte: start, lte: end } },
+        orderBy: { openTime: "asc" },
+        take: input.limit,
+      });
+      return rows.map((row) => ({
+        time: Number(row.openTime),
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: row.volume,
+      }));
+    }),
 });

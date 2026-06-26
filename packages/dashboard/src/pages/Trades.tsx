@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Download, Search } from "lucide-react";
-import type { Trade, TradeDetail } from "../lib/types";
+import type { ReplayCandle, Trade, TradeDetail } from "../lib/types";
 import { TradeTable } from "../components/TradeTable";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { trpc } from "../lib/api";
@@ -9,6 +9,7 @@ export function Trades({ trades }: { trades: Trade[] }) {
   const [direction, setDirection] = useState("ALL");
   const [query, setQuery] = useState("");
   const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
+  const [replayCandles, setReplayCandles] = useState<ReplayCandle[]>([]);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const filtered = useMemo(() => trades.filter((trade) => {
     const directionMatch = direction === "ALL" || trade.direction === direction;
@@ -30,9 +31,14 @@ export function Trades({ trades }: { trades: Trade[] }) {
   const openReplay = async (trade: Trade) => {
     setLoadingReplay(true);
     setSelectedTrade({ ...trade, transitions: [], journalEntries: [] });
+    setReplayCandles([]);
     try {
-      const detail = await trpc.query("trades.detail", { id: trade.id }) as TradeDetail | null;
+      const [detail, candles] = await Promise.all([
+        trpc.query("trades.detail", { id: trade.id }) as Promise<TradeDetail | null>,
+        trpc.query("trades.candles", { id: trade.id, interval: "15", limit: 220 }) as Promise<ReplayCandle[]>,
+      ]);
       if (detail) setSelectedTrade(detail);
+      setReplayCandles(candles);
     } finally {
       setLoadingReplay(false);
     }
@@ -62,7 +68,7 @@ export function Trades({ trades }: { trades: Trade[] }) {
       </div>
 
       <div className="glass-card"><TradeTable trades={filtered} onSelect={openReplay} /></div>
-      <TradeReplayPanel trade={selectedTrade} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
+      <TradeReplayPanel trade={selectedTrade} candles={replayCandles} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
     </div>
   );
 }

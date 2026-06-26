@@ -69,6 +69,29 @@ export interface TradeDetail extends Trade {
   journalEntries: TradeJournalEntry[];
 }
 
+export interface ReplayCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface MarketScanItem {
+  exchange: string;
+  symbol: string;
+  score: number;
+  direction: string;
+  price: number;
+  volumeRatio: number;
+  volatilityPct: number;
+  trendPct: number;
+  reason: string;
+  candleCount15m: number;
+  candleCount4h: number;
+}
+
 export interface AuditEntry {
   id: string;
   action: string;

@@ -1,12 +1,15 @@
-import { Activity, BrainCircuit, Clock, Crosshair, Shield, X, Zap } from "lucide-react";
-import type { TradeDetail } from "../lib/types";
+import { Activity, Clock, Crosshair, Shield, X, Zap } from "lucide-react";
+import type { ReplayCandle, TradeDetail } from "../lib/types";
+import { TradeReplayChart } from "./TradeReplayChart";
 
 export function TradeReplayPanel({
   trade,
+  candles = [],
   loading,
   onClose,
 }: {
   trade: TradeDetail | null;
+  candles?: ReplayCandle[];
   loading: boolean;
   onClose: () => void;
 }) {
@@ -57,6 +60,8 @@ export function TradeReplayPanel({
               <ReplayStat icon={Shield} label="SL / TP" value={`${formatPrice(trade.stopLoss)} / ${formatPrice(trade.takeProfit)}`} />
               <ReplayStat icon={Clock} label="Hold" value={trade.holdTimeSeconds == null ? "-" : `${Math.round(trade.holdTimeSeconds / 60)}m`} />
             </div>
+
+            <TradeReplayChart trade={trade} candles={candles} />
 
             <div className="glass-card">
               <div className="mb-4 flex items-center justify-between gap-3">

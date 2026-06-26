@@ -95,6 +95,7 @@ const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
 const PAPER_TRAILING_STOP_PCT = 1.5;
 const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
+const MARKET_SCANNER_INTERVAL_MS = 5 * 60_000;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -272,6 +273,8 @@ async function bootstrap(): Promise<void> {
   void monitorPaperProtections();
   setInterval(() => void runAutoOptimizer(), AUTO_OPTIMIZER_INTERVAL_MS).unref();
   void runAutoOptimizer();
+  setInterval(() => void runMarketScanner(), MARKET_SCANNER_INTERVAL_MS).unref();
+  void runMarketScanner();
   if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
     setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
   }
@@ -342,7 +345,22 @@ function subscribeStrategies(): void {
 async function dispatchStrategyCandle(exchange: "bybit" | "binance", candle: Parameters<typeof bybitAdapter.subscribeCandles>[2] extends (value: infer T) => void ? T : never): Promise<void> {
   if (!candle.confirmed) return;
   if (exchange === "binance") {
-    binanceStore.addCandle({
+    const normalized = {
+      symbol: candle.symbol,
+      timeframe: candle.interval,
+      openTime: candle.openTime,
+      closeTime: candle.closeTime,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+      confirmed: candle.confirmed,
+    };
+    binanceStore.addCandle(normalized);
+    void persistHistoricalCandle(normalized);
+  } else {
+    void persistHistoricalCandle({
       symbol: candle.symbol,
       timeframe: candle.interval,
       openTime: candle.openTime,
@@ -402,7 +420,7 @@ async function warmMarketData(): Promise<void> {
       for (const timeframe of ["1", "3", "15", "60", "240"]) {
         const candles = await context.adapter.getHistoricalCandles(context.symbol, timeframe, 200);
         for (const candle of candles) {
-          context.store.addCandle({
+          const normalized = {
             symbol: candle.symbol,
             timeframe: candle.interval,
             openTime: candle.openTime,
@@ -413,7 +431,9 @@ async function warmMarketData(): Promise<void> {
             close: candle.close,
             volume: candle.volume,
             confirmed: candle.confirmed,
-          });
+          };
+          context.store.addCandle(normalized);
+          void persistHistoricalCandle(normalized);
         }
       }
       const [book, fundingRate] = await Promise.all([
@@ -779,6 +799,95 @@ async function runAutoOptimizer(): Promise<void> {
   }
 }
 
+async function runMarketScanner(): Promise<void> {
+  try {
+    const scans = [...contexts.values()].map((context) => {
+      const candles15 = context.store.getCandles(context.symbol, "15", 80);
+      const candles240 = context.store.getCandles(context.symbol, "240", 80);
+      const ticker = context.store.getTicker(context.symbol);
+      const closes15 = candles15.map((candle) => candle.close);
+      const closes240 = candles240.map((candle) => candle.close);
+      const price = ticker?.price ?? closes15.at(-1) ?? 0;
+      const volumeNow = candles15.at(-1)?.volume ?? 0;
+      const avgVolume = average(candles15.slice(-20).map((candle) => candle.volume));
+      const volatility = price > 0 ? average(candles15.slice(-20).map((candle) => (candle.high - candle.low) / price)) * 100 : 0;
+      const fast = average(closes240.slice(-21));
+      const slow = average(closes240.slice(-55));
+      const trendPct = price > 0 ? Math.abs(fast - slow) / price * 100 : 0;
+      const volumeScore = avgVolume > 0 ? Math.min(30, (volumeNow / avgVolume) * 15) : 0;
+      const trendScore = Math.min(35, trendPct * 140);
+      const volatilityScore = volatility >= 0.15 && volatility <= 2.8 ? 25 : volatility < 0.15 ? 8 : 12;
+      const dataScore = Math.min(10, ((candles15.length + candles240.length) / 160) * 10);
+      const score = Math.round(Math.max(0, Math.min(100, volumeScore + trendScore + volatilityScore + dataScore)));
+      const direction = fast > slow ? "LONG" : fast < slow ? "SHORT" : "NEUTRAL";
+      return {
+        exchange: context.exchange,
+        symbol: context.symbol,
+        score,
+        direction,
+        price,
+        volumeRatio: avgVolume > 0 ? volumeNow / avgVolume : 0,
+        volatilityPct: volatility,
+        trendPct,
+        reason: score >= 70 ? "High quality market" : score >= 50 ? "Watchlist candidate" : "Low priority",
+        candleCount15m: candles15.length,
+        candleCount4h: candles240.length,
+      };
+    }).sort((a, b) => b.score - a.score);
+    await journal.record("AI_MARKET_SCAN", { markets: scans, best: scans[0] ?? null });
+    await prisma.botEvent.create({
+      data: {
+        type: "AI_MARKET_SCAN",
+        symbol: scans[0]?.symbol ?? null,
+        message: scans[0] ? `Best market: ${scans[0].symbol} score ${scans[0].score}` : "Market scanner has no candidates",
+        data: { markets: scans.slice(0, 10) },
+      },
+    });
+    if (scans[0]) operatorLog("INFO", "AI MARKET SCANNER", `${scans[0].symbol} score ${scans[0].score} | ${scans[0].reason}`);
+  } catch (error) {
+    log.warn({ error }, "market scanner failed");
+  }
+}
+
+async function persistHistoricalCandle(candle: {
+  symbol: string;
+  timeframe: string;
+  openTime: number;
+  closeTime?: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  confirmed?: boolean;
+}): Promise<void> {
+  try {
+    await prisma.historicalCandle.upsert({
+      where: { symbol_interval_openTime: { symbol: candle.symbol, interval: candle.timeframe, openTime: BigInt(candle.openTime) } },
+      create: {
+        symbol: candle.symbol,
+        interval: candle.timeframe,
+        openTime: BigInt(candle.openTime),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+        turnover: 0,
+      },
+      update: {
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      },
+    });
+  } catch (error) {
+    log.debug({ error, symbol: candle.symbol, timeframe: candle.timeframe }, "historical candle persist skipped");
+  }
+}
+
 async function monitorPaperProtections(): Promise<void> {
   const trades = await prisma.trade.findMany({
     where: {
@@ -869,6 +978,10 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
   } catch (error) {
     log.warn({ error, tradeId }, "paper protection monitor failed");
   }
+}
+
+function average(values: number[]): number {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
 function delay(milliseconds: number): Promise<void> {
