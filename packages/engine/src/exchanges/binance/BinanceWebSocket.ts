@@ -28,7 +28,7 @@ export class BinanceWebSocket extends EventEmitter<Events> {
       `${symbol.toLowerCase()}@markPrice@1s`,
     ]);
     if (!streams.length) return;
-    const host = this.testnet ? "wss://stream.binancefuture.com" : "wss://fstream.binance.com";
+    const host = this.testnet ? "wss://demo-fstream.binance.com" : "wss://fstream.binance.com";
     this.socket = new WebSocket(`${host}/stream?streams=${streams.join("/")}`);
     this.socket.on("open", () => { this.attempts = 0; });
     this.socket.on("ping", (data) => this.socket?.pong(data));

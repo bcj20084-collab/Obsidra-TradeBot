@@ -17,7 +17,7 @@ export class BinanceRestClient {
     private readonly paperFeeRate = 0.00055,
     private readonly paperSlippageBps = 2,
   ) {
-    this.baseUrl = testnet ? "https://testnet.binancefuture.com" : "https://fapi.binance.com";
+    this.baseUrl = testnet ? "https://demo-fapi.binance.com" : "https://fapi.binance.com";
   }
   get isPaperTrading(): boolean { return this.paper; }
   async publicGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
