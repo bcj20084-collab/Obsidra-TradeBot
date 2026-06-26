@@ -280,6 +280,12 @@ export class BybitRestClient {
                 method,
                 path,
                 credentialSource: error.context.credentialSource,
+                httpStatus: error.context.httpStatus,
+                bybitHost: error.context.bybitHost,
+                credentialKeyLength: error.context.credentialKeyLength,
+                credentialKeyFingerprint: error.context.credentialKeyFingerprint,
+                timestampOffsetMs: error.context.timestampOffsetMs,
+                authHint: error.context.authHint,
                 hasFallback,
                 error,
               }, hasFallback ? "Bybit credential failed; trying fallback credential" : "Bybit credential failed");

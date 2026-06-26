@@ -150,9 +150,13 @@ function errorSummary(value: unknown): string {
       typeof errorContext.httpStatus === "number" ? `http=${errorContext.httpStatus}` : "",
       typeof record.hasFallback === "boolean" ? `fallback=${record.hasFallback ? "yes" : "no"}` : "",
       typeof record.path === "string" ? `path=${record.path}` : "",
+      typeof record.bybitHost === "string" ? `host=${record.bybitHost}` : "",
       typeof errorContext.bybitHost === "string" ? `host=${errorContext.bybitHost}` : "",
+      typeof record.credentialKeyLength === "number" ? `keyLength=${record.credentialKeyLength}` : "",
       typeof errorContext.credentialKeyLength === "number" ? `keyLength=${errorContext.credentialKeyLength}` : "",
+      typeof record.credentialKeyFingerprint === "string" ? `keyFingerprint=${record.credentialKeyFingerprint}` : "",
       typeof errorContext.credentialKeyFingerprint === "string" ? `keyFingerprint=${errorContext.credentialKeyFingerprint}` : "",
+      typeof record.timestampOffsetMs === "number" ? `timeOffsetMs=${record.timestampOffsetMs}` : "",
       typeof errorContext.timestampOffsetMs === "number" ? `timeOffsetMs=${errorContext.timestampOffsetMs}` : "",
     ].filter(Boolean);
     const message = candidate instanceof Error
@@ -162,7 +166,7 @@ function errorSummary(value: unknown): string {
         : typeof record.reason === "string"
           ? record.reason
           : "";
-    const hint = typeof errorContext.authHint === "string" ? errorContext.authHint : "";
+    const hint = typeof record.authHint === "string" ? record.authHint : typeof errorContext.authHint === "string" ? errorContext.authHint : "";
     return [...details, message, hint].filter(Boolean).join(" | ");
   }
   return "";
