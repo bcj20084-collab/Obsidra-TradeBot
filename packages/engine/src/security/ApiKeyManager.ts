@@ -6,19 +6,53 @@ interface EncryptedValue {
   ciphertext: Buffer;
 }
 
+export interface ApiCredential {
+  source: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
+interface EncryptedCredential {
+  source: string;
+  apiKey: EncryptedValue;
+  apiSecret: EncryptedValue;
+}
+
 export class ApiKeyManager {
   private readonly key: Buffer;
-  private readonly apiKey: EncryptedValue;
-  private readonly apiSecret: EncryptedValue;
+  private readonly credentials: EncryptedCredential[];
 
-  constructor(apiKey: string, apiSecret: string, masterSecret: string) {
+  constructor(apiKey: string, apiSecret: string, masterSecret: string, fallbackCredentials: ApiCredential[] = []) {
     this.key = pbkdf2Sync(masterSecret, "obsidra-api-key-v2", 100_000, 32, "sha256");
-    this.apiKey = this.encrypt(apiKey.trim());
-    this.apiSecret = this.encrypt(apiSecret.trim());
+    const credentials = [
+      { source: "primary", apiKey, apiSecret },
+      ...fallbackCredentials,
+    ].filter((credential) => credential.apiKey.trim() && credential.apiSecret.trim());
+    this.credentials = credentials.map((credential) => ({
+      source: credential.source,
+      apiKey: this.encrypt(credential.apiKey.trim()),
+      apiSecret: this.encrypt(credential.apiSecret.trim()),
+    }));
   }
 
   withCredentials<T>(operation: (apiKey: string, apiSecret: string) => T): T {
-    return operation(this.decrypt(this.apiKey), this.decrypt(this.apiSecret));
+    const credential = this.credentials[0];
+    if (!credential) throw new Error("Bybit API credentials are not configured");
+    return operation(this.decrypt(credential.apiKey), this.decrypt(credential.apiSecret));
+  }
+
+  credentialCount(): number {
+    return this.credentials.length;
+  }
+
+  withCredentialAt<T>(index: number, operation: (credential: ApiCredential) => T): T {
+    const credential = this.credentials[index];
+    if (!credential) throw new Error(`Bybit API credential ${index} is not configured`);
+    return operation({
+      source: credential.source,
+      apiKey: this.decrypt(credential.apiKey),
+      apiSecret: this.decrypt(credential.apiSecret),
+    });
   }
 
   private encrypt(value: string): EncryptedValue {

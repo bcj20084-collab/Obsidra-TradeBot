@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { AppError, ErrorCode, errorMessage, moduleLogger } from "@obsidra/shared";
 import { TokenBucket } from "./TokenBucket.js";
-import { ApiKeyManager } from "../security/ApiKeyManager.js";
+import { ApiKeyManager, type ApiCredential } from "../security/ApiKeyManager.js";
 
 const log = moduleLogger("BybitRestClient");
 
@@ -70,13 +70,14 @@ export class BybitRestClient {
     private readonly paperTrading: boolean,
     masterSecret = process.env.MASTER_SECRET ?? "development-only-master-secret-32",
     demo = false,
+    fallbackCredentials: ApiCredential[] = [],
   ) {
     this.baseUrl = demo
       ? "https://api-demo.bybit.com"
       : testnet
         ? "https://api-testnet.bybit.com"
         : "https://api.bybit.com";
-    this.keys = new ApiKeyManager(apiKey, apiSecret, masterSecret);
+    this.keys = new ApiKeyManager(apiKey, apiSecret, masterSecret, fallbackCredentials);
   }
 
   getLastHeartbeat(): number {
@@ -239,42 +240,28 @@ export class BybitRestClient {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const attemptTimestamp = Date.now().toString();
-        const attemptCredentials = this.keys.withCredentials((apiKey, apiSecret) => ({
-          apiKey,
-          signature: createHmac("sha256", apiSecret)
-            .update(`${attemptTimestamp}${apiKey}${receiveWindow}${body}`)
-            .digest("hex"),
-        }));
-        const response = await fetch(url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            "X-BAPI-API-KEY": attemptCredentials.apiKey,
-            "X-BAPI-SIGN": attemptCredentials.signature,
-            "X-BAPI-SIGN-TYPE": "2",
-            "X-BAPI-TIMESTAMP": attemptTimestamp,
-            "X-BAPI-RECV-WINDOW": receiveWindow,
-          },
-          ...(method === "POST" ? { body } : {}),
-        });
-        this.lastHeartbeat = Date.now();
-        const responseText = await response.text();
-        const json = parseBybitEnvelope<T>(response, responseText, method, path);
-        if (response.status === 429 || [500, 502, 503, 504].includes(response.status) || RETRYABLE_CODES.has(json.retCode)) {
-          throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg ?? `HTTP ${response.status}`, { retCode: json.retCode });
+        let lastPermanentAuthError: AppError | undefined;
+        for (let credentialIndex = 0; credentialIndex < this.keys.credentialCount(); credentialIndex += 1) {
+          try {
+            const json = await this.requestWithCredential<T>(credentialIndex, method, path, url, body, attemptTimestamp, receiveWindow);
+            return json.result;
+          } catch (error) {
+            if (error instanceof AppError && error.code === ErrorCode.EXCHANGE_PERMANENT) {
+              lastPermanentAuthError = error;
+              const hasFallback = credentialIndex + 1 < this.keys.credentialCount();
+              log.warn({
+                method,
+                path,
+                credentialSource: error.context.credentialSource,
+                hasFallback,
+                error,
+              }, hasFallback ? "Bybit credential failed; trying fallback credential" : "Bybit credential failed");
+              if (hasFallback) continue;
+            }
+            throw error;
+          }
         }
-        if ([401, 403].includes(response.status) || FATAL_CODES.has(json.retCode)) {
-          throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg, { retCode: json.retCode });
-        }
-        if (WARN_CODES.has(json.retCode)) {
-          log.warn({ method, path, retCode: json.retCode }, "Bybit warn code; action skipped");
-          return json.result;
-        }
-        if (!response.ok || json.retCode !== 0) {
-          log.error({ method, path, retCode: json.retCode, message: json.retMsg }, "Bybit unexpected error");
-          throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg ?? `Unexpected retCode ${json.retCode}`, { retCode: json.retCode });
-        }
-        return json.result;
+        if (lastPermanentAuthError) throw lastPermanentAuthError;
       } catch (error) {
         if (error instanceof AppError && error.code === ErrorCode.EXCHANGE_PERMANENT) throw error;
         if (attempt === 2) {
@@ -294,6 +281,69 @@ export class BybitRestClient {
       }
     }
     throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, "Retry loop exhausted");
+  }
+
+  private async requestWithCredential<T>(
+    credentialIndex: number,
+    method: "GET" | "POST",
+    path: string,
+    url: string,
+    body: string,
+    timestamp: string,
+    receiveWindow: string,
+  ): Promise<BybitEnvelope<T>> {
+    return this.keys.withCredentialAt(credentialIndex, async (credential) => {
+      const signature = createHmac("sha256", credential.apiSecret)
+        .update(`${timestamp}${credential.apiKey}${receiveWindow}${body}`)
+        .digest("hex");
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-BAPI-API-KEY": credential.apiKey,
+          "X-BAPI-SIGN": signature,
+          "X-BAPI-SIGN-TYPE": "2",
+          "X-BAPI-TIMESTAMP": timestamp,
+          "X-BAPI-RECV-WINDOW": receiveWindow,
+        },
+        ...(method === "POST" ? { body } : {}),
+      });
+      this.lastHeartbeat = Date.now();
+      const responseText = await response.text();
+      let json: BybitEnvelope<T>;
+      try {
+        json = parseBybitEnvelope<T>(response, responseText, method, path);
+      } catch (error) {
+        if (error instanceof AppError && error.code === ErrorCode.EXCHANGE_PERMANENT) {
+          throw new AppError(error.code, error.message, {
+            ...error.context,
+            credentialSource: credential.source,
+            httpStatus: response.status,
+          }, { cause: error });
+        }
+        throw error;
+      }
+      const context = {
+        retCode: json.retCode,
+        credentialSource: credential.source,
+        httpStatus: response.status,
+      };
+      if (response.status === 429 || [500, 502, 503, 504].includes(response.status) || RETRYABLE_CODES.has(json.retCode)) {
+        throw new AppError(ErrorCode.EXCHANGE_TEMPORARY, json.retMsg ?? `HTTP ${response.status}`, context);
+      }
+      if ([401, 403].includes(response.status) || FATAL_CODES.has(json.retCode)) {
+        throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg, context);
+      }
+      if (WARN_CODES.has(json.retCode)) {
+        log.warn({ method, path, retCode: json.retCode }, "Bybit warn code; action skipped");
+        return json;
+      }
+      if (!response.ok || json.retCode !== 0) {
+        log.error({ method, path, retCode: json.retCode, message: json.retMsg }, "Bybit unexpected error");
+        throw new AppError(ErrorCode.EXCHANGE_PERMANENT, json.retMsg ?? `Unexpected retCode ${json.retCode}`, context);
+      }
+      return json;
+    });
   }
 
   private queryString(payload: Record<string, unknown>): string {

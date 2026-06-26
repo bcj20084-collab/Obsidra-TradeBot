@@ -27,6 +27,7 @@ import { MLTrainer } from "./signals/MLTrainer.js";
 import { createStrategy } from "./strategies/StrategyFactory.js";
 import { StrategyCoordinator } from "./strategies/StrategyCoordinator.js";
 import type { ExchangeId, IExchangeAdapter } from "./exchanges/IExchangeAdapter.js";
+import type { ApiCredential } from "./security/ApiKeyManager.js";
 
 const env = getEnv();
 const log = moduleLogger("engine");
@@ -40,13 +41,15 @@ const binanceStore = new MarketDataStore();
 const marketStores = new Map<ExchangeId, MarketDataStore>([["bybit", bybitStore], ["binance", binanceStore]]);
 const bybitPaper = activeDescriptors.filter((item) => item.exchange === "bybit").every((item) => item.isPaperTrading);
 const binancePaper = activeDescriptors.filter((item) => item.exchange === "binance").every((item) => item.isPaperTrading);
+const bybitCredentialCandidates = buildBybitCredentialCandidates();
 const client = new BybitRestClient(
-  env.BYBIT_API_KEY_NEW || env.BYBIT_API_KEY,
-  env.BYBIT_API_SECRET_NEW || env.BYBIT_API_SECRET,
+  bybitCredentialCandidates[0]?.apiKey ?? "",
+  bybitCredentialCandidates[0]?.apiSecret ?? "",
   env.BYBIT_TESTNET,
   bybitPaper,
   env.MASTER_SECRET,
   env.BYBIT_DEMO,
+  bybitCredentialCandidates.slice(1),
 );
 // Demo Trading consumes mainnet public market data; only its private REST domain differs.
 const websocket = new BybitWebSocket(bybitStore, marketSymbols, env.BYBIT_TESTNET && !env.BYBIT_DEMO);
@@ -101,6 +104,17 @@ interface TradingContext {
 
 function contextKey(exchange: ExchangeId, symbol: string): string {
   return `${exchange}:${symbol}`;
+}
+
+function buildBybitCredentialCandidates(): ApiCredential[] {
+  const candidates: ApiCredential[] = [];
+  if (env.BYBIT_API_KEY_NEW.trim() && env.BYBIT_API_SECRET_NEW.trim()) {
+    candidates.push({ source: "BYBIT_API_KEY_NEW", apiKey: env.BYBIT_API_KEY_NEW, apiSecret: env.BYBIT_API_SECRET_NEW });
+  }
+  if (env.BYBIT_API_KEY.trim() && env.BYBIT_API_SECRET.trim()) {
+    candidates.push({ source: "BYBIT_API_KEY", apiKey: env.BYBIT_API_KEY, apiSecret: env.BYBIT_API_SECRET });
+  }
+  return candidates;
 }
 
 function formatMaybeNumber(value: unknown, digits = 2): string {
@@ -276,6 +290,7 @@ async function bootstrap(): Promise<void> {
     ["Environment", env.BYBIT_DEMO ? "BYBIT DEMO" : env.BYBIT_TESTNET ? "BYBIT TESTNET" : bybitPaper ? "PAPER" : "LIVE"],
     ["Symbols", symbols.join(", ")],
     ["Strategies", activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"],
+    ["Bybit credentials", bybitPaper ? "not required in PAPER" : bybitCredentialCandidates.map((item) => item.source).join(" -> ") || "missing"],
     ["Telegram", telegram.configured ? "connected" : "disabled"],
   ]);
   if (telegram.configured) {
