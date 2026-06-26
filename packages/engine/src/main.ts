@@ -94,6 +94,7 @@ const PAPER_PROTECTION_INTERVAL_MS = 15_000;
 const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
 const PAPER_TRAILING_STOP_PCT = 1.5;
 const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
+const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -269,6 +270,8 @@ async function bootstrap(): Promise<void> {
   }
   setInterval(() => void monitorPaperProtections(), PAPER_PROTECTION_INTERVAL_MS).unref();
   void monitorPaperProtections();
+  setInterval(() => void runAutoOptimizer(), AUTO_OPTIMIZER_INTERVAL_MS).unref();
+  void runAutoOptimizer();
   if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
     setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
   }
@@ -696,6 +699,82 @@ async function runAutoTraining(trigger: "startup" | "scheduled" | "manual" = "sc
     } catch (error) {
       log.warn({ error, symbol, trigger }, "ML auto-training failed");
       await journal.record("ML_TRAINING_FAILED", { trigger, symbol, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+}
+
+async function runAutoOptimizer(): Promise<void> {
+  const uniqueSymbols = [...new Set([...contexts.values()].map((context) => context.symbol))];
+  for (const symbol of uniqueSymbols) {
+    try {
+      const trades = await prisma.trade.findMany({
+        where: {
+          symbol,
+          executionMode: "PAPER",
+          status: "CLOSED",
+          pnlUsdt: { not: null },
+          closedAt: { gte: new Date(Date.now() - 7 * 86_400_000) },
+        },
+        orderBy: { closedAt: "desc" },
+        take: 30,
+        select: { pnlUsdt: true, feeUsdt: true, signalScore: true },
+      });
+      if (trades.length < 10) {
+        await journal.record("AI_OPTIMIZER_SKIPPED", { symbol, reason: "Not enough recent closed paper trades", tradeCount: trades.length });
+        continue;
+      }
+      const pnl = trades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+      const wins = trades.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
+      const winRate = wins / trades.length;
+      const lossStreak = trades.findIndex((trade) => (trade.pnlUsdt ?? 0) > 0);
+      const consecutiveLosses = lossStreak === -1 ? trades.length : lossStreak;
+      const averageScore = trades.reduce((sum, trade) => sum + trade.signalScore, 0) / trades.length;
+      const contextsForSymbol = [...contexts.values()].filter((context) => context.symbol === symbol);
+      const current = contextsForSymbol[0]?.adaptive.snapshot.config;
+      if (!current) continue;
+
+      let mode: "DEFENSIVE" | "AGGRESSIVE" | "STEADY" = "STEADY";
+      let reason = "Recent paper performance is stable";
+      const bias = { ...current };
+      if (pnl < 0 || winRate < 0.42 || consecutiveLosses >= 3) {
+        mode = "DEFENSIVE";
+        reason = `Protecting capital: pnl=${pnl.toFixed(2)}, winRate=${(winRate * 100).toFixed(1)}%, lossStreak=${consecutiveLosses}`;
+        bias.minSignalScore = Math.min(85, Math.max(current.minSignalScore + 5, averageScore + 3));
+        bias.maxPositionPct = Math.max(0.5, current.maxPositionPct * 0.75);
+        bias.leverageMax = Math.max(1, Math.min(current.leverageMax, 3));
+        bias.trailingStopPct = Math.max(1, current.trailingStopPct * 0.9);
+      } else if (pnl > 0 && winRate >= 0.58 && consecutiveLosses === 0) {
+        mode = "AGGRESSIVE";
+        reason = `Scaling carefully: pnl=${pnl.toFixed(2)}, winRate=${(winRate * 100).toFixed(1)}%`;
+        bias.minSignalScore = Math.max(58, current.minSignalScore - 2);
+        bias.maxPositionPct = Math.min(3, current.maxPositionPct * 1.1);
+        bias.tpMultiplier = Math.min(4, current.tpMultiplier * 1.05);
+      }
+
+      await Promise.all(contextsForSymbol.map((context) => context.adaptive.applyOptimizer(reason, bias)));
+      await journal.record("AI_OPTIMIZER_APPLIED", {
+        symbol,
+        mode,
+        reason,
+        tradeCount: trades.length,
+        pnl,
+        winRate,
+        consecutiveLosses,
+        averageScore,
+        config: bias,
+      });
+      await prisma.botEvent.create({
+        data: {
+          type: "AI_OPTIMIZER_APPLIED",
+          symbol,
+          message: `${symbol} brain mode ${mode}: ${reason}`,
+          data: { mode, reason, tradeCount: trades.length, pnl, winRate, consecutiveLosses, averageScore, config: bias },
+        },
+      });
+      operatorLog("INFO", `AI BRAIN | ${symbol}`, `${mode} | ${reason}`);
+    } catch (error) {
+      log.warn({ error, symbol }, "AI optimizer failed");
+      await journal.record("AI_OPTIMIZER_FAILED", { symbol, error: error instanceof Error ? error.message : String(error) });
     }
   }
 }

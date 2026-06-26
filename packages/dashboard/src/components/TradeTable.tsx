@@ -1,7 +1,15 @@
 import type { CSSProperties } from "react";
 import type { Trade } from "../lib/types";
 
-export function TradeTable({ trades, compact = false }: { trades: Trade[]; compact?: boolean }) {
+export function TradeTable({
+  trades,
+  compact = false,
+  onSelect,
+}: {
+  trades: Trade[];
+  compact?: boolean;
+  onSelect?: (trade: Trade) => void;
+}) {
   if (!trades.length) {
     return (
       <div className="empty-state">
@@ -23,13 +31,17 @@ export function TradeTable({ trades, compact = false }: { trades: Trade[]; compa
         </thead>
         <tbody>
           {trades.map((trade) => (
-            <tr className="group border-t border-white/10 transition hover:bg-white/[0.03]" key={trade.id}>
+            <tr
+              className={`group border-t border-white/10 transition hover:bg-white/[0.03] ${onSelect ? "cursor-pointer" : ""}`}
+              key={trade.id}
+              onClick={() => onSelect?.(trade)}
+            >
               <td className="px-3 py-4 text-slate-400">{new Date(trade.createdAt).toLocaleString()}</td>
               <td className="px-3 py-4">
                 <div className="font-black text-white">{trade.symbol}</div>
-                <div className="text-xs uppercase tracking-wider text-slate-500">{trade.exchange} · {trade.strategyId}</div>
+                <div className="text-xs uppercase tracking-wider text-slate-500">{trade.exchange} / {trade.strategyId}</div>
               </td>
-              <td className="px-3 py-4"><span className="pill">Paper</span></td>
+              <td className="px-3 py-4"><span className="pill">{trade.executionMode ?? "Paper"}</span></td>
               <td className="px-3 py-4">
                 <span className={`direction-badge ${trade.direction === "LONG" ? "direction-long" : "direction-short"}`}>{trade.direction}</span>
               </td>
@@ -44,7 +56,7 @@ export function TradeTable({ trades, compact = false }: { trades: Trade[]; compa
                   {trade.signalScore}
                 </div>
               </td>
-              <td className="px-3 py-4 text-slate-300">{trade.holdTimeSeconds == null ? "—" : `${Math.round(trade.holdTimeSeconds / 60)}m`}</td>
+              <td className="px-3 py-4 text-slate-300">{trade.holdTimeSeconds == null ? "-" : `${Math.round(trade.holdTimeSeconds / 60)}m`}</td>
               <td className="px-3 py-4"><span className="pill">{trade.status}</span></td>
             </tr>
           ))}
@@ -55,5 +67,5 @@ export function TradeTable({ trades, compact = false }: { trades: Trade[]; compa
 }
 
 function format(value: number | null): string {
-  return value == null ? "—" : value.toFixed(Math.abs(value) >= 100 ? 2 : 4);
+  return value == null ? "-" : value.toFixed(Math.abs(value) >= 100 ? 2 : 4);
 }

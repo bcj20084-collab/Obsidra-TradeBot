@@ -22,4 +22,15 @@ export const tradesRouter = router({
       }),
     ),
   count: protectedProcedure.query(() => prisma.trade.count()),
+  detail: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .query(({ input }) =>
+      prisma.trade.findUnique({
+        where: { id: input.id },
+        include: {
+          transitions: { orderBy: { createdAt: "asc" } },
+          journalEntries: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+    ),
 });

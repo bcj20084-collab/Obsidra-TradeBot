@@ -12,6 +12,7 @@ const DEFAULTS: AdaptiveConfig = {
 export class AdaptiveParams {
   private readonly baseConfig: AdaptiveConfig;
   private config: AdaptiveConfig;
+  private learningBias: Partial<AdaptiveConfig> = {};
   private regime: MarketRegime = "NORMAL";
 
   constructor(private readonly symbol = "ALL", minSignalScore = DEFAULTS.minSignalScore) {
@@ -42,6 +43,7 @@ export class AdaptiveParams {
     } else if (adxValue < 20) {
       regime = "RANGING";
     }
+    this.applyLearningBias(next);
     this.clamp(next);
     if (regime !== this.regime) {
       await prisma.adaptiveLog.create({
@@ -54,6 +56,23 @@ export class AdaptiveParams {
 
   get snapshot(): { regime: MarketRegime; config: AdaptiveConfig } {
     return { regime: this.regime, config: { ...this.config } };
+  }
+
+  async applyOptimizer(reason: string, bias: Partial<AdaptiveConfig>): Promise<void> {
+    this.learningBias = { ...this.learningBias, ...bias };
+    const next = { ...this.config };
+    this.applyLearningBias(next);
+    this.clamp(next);
+    this.config = next;
+    await prisma.adaptiveLog.create({
+      data: { symbol: this.symbol, regime: this.regime, config: next, reason: `AI_OPTIMIZER: ${reason}` },
+    });
+  }
+
+  private applyLearningBias(config: AdaptiveConfig): void {
+    for (const [key, value] of Object.entries(this.learningBias) as Array<[keyof AdaptiveConfig, number]>) {
+      if (Number.isFinite(value)) config[key] = value;
+    }
   }
 
   private clamp(config: AdaptiveConfig): void {

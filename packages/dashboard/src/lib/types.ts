@@ -38,6 +38,35 @@ export interface Trade {
   signalScore: number;
   holdTimeSeconds: number | null;
   status: string;
+  executionMode?: string;
+  pnlPct?: number | null;
+  closeReason?: string | null;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  signalData?: Record<string, unknown>;
+  marketRegime?: string | null;
+  mlScore?: number | null;
+}
+
+export interface TradeTransition {
+  id: string;
+  fromState: string | null;
+  toState: string;
+  reason: string;
+  data: unknown;
+  createdAt: string;
+}
+
+export interface TradeJournalEntry {
+  id: string;
+  type: string;
+  data: unknown;
+  createdAt: string;
+}
+
+export interface TradeDetail extends Trade {
+  transitions: TradeTransition[];
+  journalEntries: TradeJournalEntry[];
 }
 
 export interface AuditEntry {

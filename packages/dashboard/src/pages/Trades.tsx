@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
 import { Download, Search } from "lucide-react";
-import type { Trade } from "../lib/types";
+import type { Trade, TradeDetail } from "../lib/types";
 import { TradeTable } from "../components/TradeTable";
+import { TradeReplayPanel } from "../components/TradeReplayPanel";
+import { trpc } from "../lib/api";
 
 export function Trades({ trades }: { trades: Trade[] }) {
   const [direction, setDirection] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
+  const [loadingReplay, setLoadingReplay] = useState(false);
   const filtered = useMemo(() => trades.filter((trade) => {
     const directionMatch = direction === "ALL" || trade.direction === direction;
     const queryMatch = !query || `${trade.symbol} ${trade.exchange} ${trade.strategyId} ${trade.status}`.toLowerCase().includes(query.toLowerCase());
@@ -21,6 +25,17 @@ export function Trades({ trades }: { trades: Trade[] }) {
     anchor.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     anchor.download = "obsidra-trades.csv";
     anchor.click();
+  };
+
+  const openReplay = async (trade: Trade) => {
+    setLoadingReplay(true);
+    setSelectedTrade({ ...trade, transitions: [], journalEntries: [] });
+    try {
+      const detail = await trpc.query("trades.detail", { id: trade.id }) as TradeDetail | null;
+      if (detail) setSelectedTrade(detail);
+    } finally {
+      setLoadingReplay(false);
+    }
   };
 
   return (
@@ -46,7 +61,8 @@ export function Trades({ trades }: { trades: Trade[] }) {
         </select>
       </div>
 
-      <div className="glass-card"><TradeTable trades={filtered} /></div>
+      <div className="glass-card"><TradeTable trades={filtered} onSelect={openReplay} /></div>
+      <TradeReplayPanel trade={selectedTrade} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
     </div>
   );
 }
