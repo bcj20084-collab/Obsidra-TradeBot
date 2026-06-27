@@ -298,9 +298,6 @@ async function bootstrap(): Promise<void> {
   void runMarketScanner();
   setInterval(() => void runSafetySupervisor(), SAFETY_SUPERVISOR_INTERVAL_MS).unref();
   void runSafetySupervisor();
-  if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
-    setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
-  }
   setInterval(() => void runAutoTraining("scheduled"), AUTO_TRAINING_INTERVAL_MS).unref();
   setInterval(() => void Promise.all(reconciliationSymbols.map((symbol) => reconciliation.reconcile(symbol))), 60_000).unref();
   websocket.on("fatal_disconnect", () => {
@@ -340,11 +337,9 @@ async function bootstrap(): Promise<void> {
   ]);
   if (telegram.configured) {
     await telegram.send([
-      "\u{1F916} <b>OBSIDRA STARTED</b>",
-      `Environment: <b>${executionEnvironmentLabel()}</b>`,
-      `Symbols: <b>${symbols.join(", ")}</b>`,
-      `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
+      "\u{1F916} <b>OBSIDRA BOT ON</b>",
       "Status: <b>RUNNING \u{2705}</b>",
+      `Mode: <b>${bybitPaper && binancePaper ? "PAPER" : executionEnvironmentLabel()}</b>`,
     ].join("\n")).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
   }
 }
@@ -589,11 +584,15 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     if (exchangeError) {
       operatorLog("WARNING", `EXCHANGE ERROR | ${exchange.toUpperCase()}:${symbol}`, `${error.code}: ${error.message} | next candle will retry`);
       log.warn({ error, exchange, symbol }, "evaluation skipped because exchange is unavailable");
+      /*
+       * Telegram clean mode: exchange errors stay in Railway logs/Discord only.
+       * Telegram is reserved for BOT ON, SIGNAL, WIN/LOSS and manual commands.
       await telegram.alert(
         `Exchange error: ${exchange.toUpperCase()}`,
         `${symbol}: ${error.message}. Botul rămâne online și va reîncerca.`,
         `${exchange}:${error.code}`,
       ).catch((telegramError) => log.warn({ error: telegramError }, "Telegram exchange alert failed"));
+       */
     } else {
       status = "ERROR";
       context.circuitBreaker.trip(String(error));
@@ -729,6 +728,9 @@ async function runAutoTraining(trigger: "startup" | "scheduled" | "manual" = "sc
       if (result.savedWeights) {
         await Promise.all([...contexts.values()].filter((context) => context.symbol === symbol).map((context) => context.ml.initialize()));
         operatorLog("INFO", `AI TRAINING | ${symbol}`, `New ML model loaded | accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}% | trades ${result.tradeCount}`);
+        /*
+         * Telegram clean mode: ML training updates stay in logs only.
+         * Telegram is reserved for BOT ON, SIGNAL, WIN/LOSS and manual commands.
         if (telegram.configured) {
           await telegram.alert(
             "AI auto-training updated",
@@ -736,6 +738,7 @@ async function runAutoTraining(trigger: "startup" | "scheduled" | "manual" = "sc
             `ml-training:${symbol}:${result.tradeCount}`,
           );
         }
+         */
       } else if (result.trained) {
         operatorLog("INFO", `AI TRAINING | ${symbol}`, `Model tested but not saved | ${result.reason} | accuracy ${((result.cvAccuracy ?? 0) * 100).toFixed(1)}%`);
       }
@@ -911,9 +914,13 @@ async function runSafetySupervisor(): Promise<void> {
       },
     });
     operatorLog(level === "DANGER" ? "WARNING" : "INFO", "AI SAFETY SUPERVISOR", summary);
+    /*
+     * Telegram clean mode: safety supervisor alerts stay in logs/dashboard.
+     * Telegram is reserved for BOT ON, SIGNAL, WIN/LOSS and manual commands.
     if (level === "DANGER" && telegram.configured) {
       await telegram.alert("AI Safety Supervisor", summary, `safety:${level}:${consecutiveLosses}:${failedEvents}`);
     }
+     */
   } catch (error) {
     log.warn({ error }, "safety supervisor failed");
   }

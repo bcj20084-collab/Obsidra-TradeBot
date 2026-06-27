@@ -58,6 +58,18 @@ export function formatSigned(value: number, decimals = 2): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}`;
 }
 
+function formatTelegramDate(timestamp?: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Bucharest",
+  }).format(timestamp ? new Date(timestamp) : new Date());
+}
+
 export class TelegramNotifier {
   private readonly apiUrl?: string;
   private lastSentAt = 0;
@@ -129,17 +141,25 @@ export class TelegramNotifier {
     const stopPct = Math.abs((signal.stopLoss - signal.entryPrice) / signal.entryPrice) * 100;
     const targetPct = Math.abs((signal.takeProfit - signal.entryPrice) / signal.entryPrice) * 100;
     const riskReward = targetPct / Math.max(stopPct, Number.EPSILON);
+    const trend = signal.direction === "LONG" ? "BULLISH" : "BEARISH";
     return this.send([
-      `${signal.direction === "LONG" ? ICON.buy : ICON.sell} <b>${action} | ${escapeTelegramHtml(symbol)} | PAPER</b>`,
-      `Confidence: <b>${(signal.confidence * 100).toFixed(1)}%</b> | Score: <b>${signal.score}/100</b>`,
+      `${signal.direction === "LONG" ? ICON.buy : ICON.sell} <b>OBSIDRA SIGNAL</b>`,
+      "",
+      `<b>${action} | ${escapeTelegramHtml(symbol)}</b>`,
+      "Mode: <b>PAPER</b>",
+      `Confidence: <b>${(signal.confidence * 100).toFixed(1)}%</b>`,
+      `Score: <b>${signal.score}/100</b>`,
+      "",
       `Entry: <b>$${formatTelegramPrice(signal.entryPrice)}</b>`,
-      `HTF Trend: <b>${signal.direction === "LONG" ? `bullish ${ICON.up}` : `bearish ${ICON.down}`}</b>`,
-      `Market Regime: <b>${escapeTelegramHtml(signal.regime)}</b>`,
-      `Stop Loss: <b>$${formatTelegramPrice(signal.stopLoss)} (${stopPct.toFixed(2)}%)</b>`,
-      `Take Profit: <b>$${formatTelegramPrice(signal.takeProfit)} (${targetPct.toFixed(2)}%)</b>`,
+      `Stop Loss: <b>$${formatTelegramPrice(signal.stopLoss)} (-${stopPct.toFixed(2)}%)</b>`,
+      `Take Profit: <b>$${formatTelegramPrice(signal.takeProfit)} (+${targetPct.toFixed(2)}%)</b>`,
       `Risk/Reward: <b>${riskReward.toFixed(2)}R</b>`,
+      "",
+      `Trend: <b>${trend}</b>`,
+      `Regime: <b>${escapeTelegramHtml(signal.regime)}</b>`,
       `Position: <b>${size.toFixed(2)} USDT | ${leverage}x</b>`,
-      `Protections: <b>TP/SL + Breakeven + Trailing + Timeout</b>`,
+      "",
+      `Time: <b>${formatTelegramDate(signal.timestamp)}</b>`,
     ].join("\n"), {
       dedupeKey: `open:${symbol}:${signal.direction}:${signal.timestamp ?? signal.entryPrice}`,
       dedupeMs: 24 * 60 * 60_000,
@@ -148,15 +168,22 @@ export class TelegramNotifier {
 
   tradeClosed(trade: ClosedTradeNotification): Promise<void> {
     const profitable = trade.pnlUsdt >= 0;
+    const action = trade.direction === "LONG" ? "BUY" : "SELL";
     return this.send([
-      `${profitable ? ICON.success : ICON.loss} <b>CLOSE | ${escapeTelegramHtml(trade.symbol)}</b>`,
-      `Side: <b>${escapeTelegramHtml(trade.direction)}</b>`,
+      `${profitable ? ICON.success : ICON.loss} <b>OBSIDRA ${profitable ? "WIN" : "LOSS"}</b>`,
+      "",
+      `<b>${escapeTelegramHtml(trade.symbol)} | ${action}</b>`,
       `Entry: <b>$${formatTelegramPrice(trade.entryPrice)}</b>`,
       `Exit: <b>$${formatTelegramPrice(trade.exitPrice)}</b>`,
-      `PnL: <b>${formatSigned(trade.pnlUsdt)} USDT (${formatSigned(trade.pnlPct)}%)</b>`,
-      `Reason: <b>${escapeTelegramHtml(trade.reason)}</b>`,
+      "",
+      `${profitable ? "Profit" : "Loss"}: <b>${formatSigned(trade.pnlPct)}%</b>`,
+      `PnL: <b>${formatSigned(trade.pnlUsdt)} USDT</b>`,
       `Duration: <b>${trade.holdTimeMinutes.toFixed(0)} min</b>`,
+      "",
+      `Reason: <b>${escapeTelegramHtml(trade.reason)}</b>`,
       `Mode: <b>PAPER</b>`,
+      "",
+      profitable ? "\u{1F3C6} Clean exit. Risk rules respected." : "\u{1F6E1}\u{FE0F} Loss controlled. Bot stayed inside risk limit.",
     ].join("\n"), {
       dedupeKey: `close:${trade.symbol}:${trade.entryPrice}:${trade.exitPrice}:${trade.reason}`,
       dedupeMs: 24 * 60 * 60_000,
