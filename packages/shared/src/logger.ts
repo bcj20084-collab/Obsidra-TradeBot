@@ -172,6 +172,67 @@ function errorSummary(value: unknown): string {
   return "";
 }
 
+function compactPrimitive(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value) && value.length <= 6 && value.every((item) => ["string", "number", "boolean"].includes(typeof item))) {
+    return value.map((item) => compactPrimitive(item)).filter(Boolean).join(",");
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? String(Math.round(value * 10_000) / 10_000) : "n/a";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "string") return cleanOperatorText(value).slice(0, 140);
+  if (value === null) return "null";
+  return "";
+}
+
+function premiumSummary(context: PremiumLogContext): string {
+  const redacted = redact(context);
+  if (!redacted || typeof redacted !== "object") return "";
+  const record = redacted as Record<string, unknown>;
+  const preferred = [
+    "status",
+    "stage",
+    "exchange",
+    "symbol",
+    "symbols",
+    "direction",
+    "score",
+    "confidence",
+    "reason",
+    "mode",
+    "executionMode",
+    "marketRegime",
+    "totalPnlUsdt",
+    "pnlUsdt",
+    "winRate",
+    "totalTrades",
+    "tradesLast24h",
+    "signalsGenerated24h",
+    "signalsRejected24h",
+    "openPositionsCount",
+    "totalExposureUsdt",
+    "currentDrawdown",
+    "uptimeSeconds",
+    "port",
+    "intervalSeconds",
+    "liveConnections",
+  ];
+  const pairs: string[] = [];
+  for (const key of preferred) {
+    if (!(key in record)) continue;
+    const value = compactPrimitive(record[key]);
+    if (value) pairs.push(`${key}=${value}`);
+  }
+  for (const [key, raw] of Object.entries(record)) {
+    if (pairs.length >= 12) break;
+    if (preferred.includes(key) || key === "railway" || key === "premium" || key === "logTier" || key === "marker") continue;
+    const value = compactPrimitive(raw);
+    if (value) pairs.push(`${key}=${value}`);
+  }
+  const error = errorSummary(redacted);
+  if (error) pairs.push(`error=${error.slice(0, 220)}`);
+  return pairs.join(" | ");
+}
+
 function writePlainModuleLog(module: string, level: string, args: unknown[]): void {
   const stream = ["FATAL", "ERROR", "WARN"].includes(level) ? process.stderr : process.stdout;
   const message = typeof args[0] === "string"
@@ -194,6 +255,17 @@ export function premiumLog(
   level: PremiumLogLevel = "info",
   message = `premium:${event}`,
 ): void {
+  if (plainRuntimeLogs) {
+    const operatorLevel: OperatorLogLevel = ["fatal", "error"].includes(level)
+      ? "ERROR"
+      : level === "warn"
+        ? "WARNING"
+        : "INFO";
+    const summary = premiumSummary({ ...context, uptimeSeconds: Math.floor(process.uptime()) });
+    operatorLog(operatorLevel, `${module.toUpperCase()} | ${event}`, summary || message);
+    return;
+  }
+
   const child = moduleLogger(module);
   const payload = {
     premium: true,

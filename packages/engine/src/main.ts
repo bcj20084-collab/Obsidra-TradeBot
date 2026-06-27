@@ -662,18 +662,6 @@ async function logEngineHeartbeat(): Promise<void> {
   }
 }
 
-async function sendTelegramStatus(): Promise<void> {
-  try {
-    const snapshots = [...contexts.values()].map((context) => ({ symbol: `${context.exchange}:${context.symbol}`, ...context.adaptive.snapshot }));
-    const primary = snapshots[0];
-    if (!primary) return;
-    const snapshot = await metrics.collect(status, primary.regime, primary.config, snapshots);
-    await telegram.status(snapshot);
-  } catch (error) {
-    log.warn({ error }, "Telegram status notification failed");
-  }
-}
-
 async function watchTradeClose(tradeId: string, exchange: ExchangeId, symbol: string, strategyId: string): Promise<void> {
   if (closeWatchers.has(tradeId)) return;
   closeWatchers.add(tradeId);

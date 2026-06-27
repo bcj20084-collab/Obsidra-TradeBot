@@ -10,7 +10,7 @@ const wss = new WebSocketServer({ server, path: "/live" });
 let liveConnections = 0;
 
 function heartbeatSeconds(): number {
-  const parsed = Number.parseInt(process.env.PREMIUM_LOG_HEARTBEAT_SECONDS ?? "60", 10);
+  const parsed = Number.parseInt(process.env.PREMIUM_LOG_HEARTBEAT_SECONDS ?? "300", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
@@ -33,9 +33,9 @@ function apiPremiumContext() {
 function startPremiumHeartbeat(): void {
   const seconds = heartbeatSeconds();
   if (seconds <= 0) return;
-  premiumLog("api", "api_heartbeat_configured", { ...apiPremiumContext(), intervalSeconds: seconds }, "info", "premium api heartbeat configured");
+  premiumLog("api", "api_heartbeat_configured", { ...apiPremiumContext(), intervalSeconds: seconds }, "info", "API heartbeat configured");
   const timer = setInterval(() => {
-    premiumLog("api", "api_heartbeat", apiPremiumContext(), "info", "premium api heartbeat");
+    premiumLog("api", "api_heartbeat", apiPremiumContext(), "info", "API online");
   }, seconds * 1_000);
   timer.unref();
 }
