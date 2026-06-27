@@ -97,6 +97,24 @@ const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
 const MARKET_SCANNER_INTERVAL_MS = 5 * 60_000;
 const SAFETY_SUPERVISOR_INTERVAL_MS = 10 * 60_000;
+const HISTORICAL_CANDLE_FLUSH_INTERVAL_MS = 10_000;
+const HISTORICAL_CANDLE_FLUSH_BATCH_SIZE = 500;
+
+interface HistoricalCandlePersistInput {
+  symbol: string;
+  timeframe: string;
+  openTime: number;
+  closeTime?: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  confirmed?: boolean;
+}
+
+const historicalCandleQueue = new Map<string, HistoricalCandlePersistInput>();
+let historicalCandleFlushInFlight = false;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -266,6 +284,8 @@ async function bootstrap(): Promise<void> {
   startHealthServer(env.PORT + 1, () => metrics.latest);
   setInterval(refreshControl, 2_000).unref();
   setInterval(refreshMetrics, 300_000).unref();
+  setInterval(() => void flushHistoricalCandleQueue(), HISTORICAL_CANDLE_FLUSH_INTERVAL_MS).unref();
+  void flushHistoricalCandleQueue();
   if (env.ENGINE_LOG_HEARTBEAT_SECONDS > 0) {
     setInterval(() => void logEngineHeartbeat(), env.ENGINE_LOG_HEARTBEAT_SECONDS * 1_000).unref();
     void logEngineHeartbeat();
@@ -899,22 +919,19 @@ async function runSafetySupervisor(): Promise<void> {
   }
 }
 
-async function persistHistoricalCandle(candle: {
-  symbol: string;
-  timeframe: string;
-  openTime: number;
-  closeTime?: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  confirmed?: boolean;
-}): Promise<void> {
+function persistHistoricalCandle(candle: HistoricalCandlePersistInput): void {
+  if (!Number.isFinite(candle.openTime) || !Number.isFinite(candle.close)) return;
+  historicalCandleQueue.set(`${candle.symbol}:${candle.timeframe}:${candle.openTime}`, candle);
+}
+
+async function flushHistoricalCandleQueue(): Promise<void> {
+  if (historicalCandleFlushInFlight || historicalCandleQueue.size === 0) return;
+  historicalCandleFlushInFlight = true;
+  const batch = [...historicalCandleQueue.entries()].slice(0, HISTORICAL_CANDLE_FLUSH_BATCH_SIZE);
+  for (const [key] of batch) historicalCandleQueue.delete(key);
   try {
-    await prisma.historicalCandle.upsert({
-      where: { symbol_interval_openTime: { symbol: candle.symbol, interval: candle.timeframe, openTime: BigInt(candle.openTime) } },
-      create: {
+    await prisma.historicalCandle.createMany({
+      data: batch.map(([, candle]) => ({
         symbol: candle.symbol,
         interval: candle.timeframe,
         openTime: BigInt(candle.openTime),
@@ -924,17 +941,14 @@ async function persistHistoricalCandle(candle: {
         close: candle.close,
         volume: candle.volume,
         turnover: 0,
-      },
-      update: {
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume,
-      },
+      })),
+      skipDuplicates: true,
     });
   } catch (error) {
-    log.debug({ error, symbol: candle.symbol, timeframe: candle.timeframe }, "historical candle persist skipped");
+    for (const [key, candle] of batch) historicalCandleQueue.set(key, candle);
+    log.warn({ error, count: batch.length, queued: historicalCandleQueue.size }, "historical candle batch persist failed");
+  } finally {
+    historicalCandleFlushInFlight = false;
   }
 }
 
