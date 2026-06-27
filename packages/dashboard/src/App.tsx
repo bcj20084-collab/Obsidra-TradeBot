@@ -13,15 +13,16 @@ import {
   Workflow,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { LogoMark } from "./components/LogoMark";
 import { hasSession, login, trpc } from "./lib/api";
 import type { Metrics, SignalFeedItem, Trade } from "./lib/types";
+import { Backtest } from "./pages/Backtest";
 import { Overview } from "./pages/Overview";
 import { Settings } from "./pages/Settings";
-import { Strategy } from "./pages/Strategy";
-import { Trades } from "./pages/Trades";
-import { Backtest } from "./pages/Backtest";
-import { Symbols } from "./pages/Symbols";
 import { Strategies } from "./pages/Strategies";
+import { Strategy } from "./pages/Strategy";
+import { Symbols } from "./pages/Symbols";
+import { Trades } from "./pages/Trades";
 
 const emptyMetrics: Metrics = {
   totalPnlUsdt: 0,
@@ -108,13 +109,13 @@ export default function App() {
   if (!authenticated) return <Login onSuccess={() => setAuthenticated(true)} />;
 
   return (
-    <div className="min-h-screen xl:grid xl:grid-cols-[280px_1fr]">
-      <aside className="sticky top-0 z-20 border-b border-white/10 bg-obsidian/80 p-4 backdrop-blur-xl xl:h-screen xl:border-b-0 xl:border-r xl:p-6">
+    <div className="app-shell min-h-screen xl:grid xl:grid-cols-[304px_1fr]">
+      <aside className="premium-sidebar sticky top-0 z-20 border-b border-white/10 p-4 backdrop-blur-xl xl:h-screen xl:border-b-0 xl:border-r xl:p-6">
         <div className="flex items-center justify-between gap-3 xl:block">
-          <div className="flex items-center gap-3">
-            <div className="logo-orb">O</div>
+          <div className="brand-card flex items-center gap-3">
+            <LogoMark />
             <div>
-              <div className="text-lg font-black tracking-[0.28em] text-white">OBSIDRA</div>
+              <div className="text-xl font-black tracking-[0.28em] text-white">OBSIDRA</div>
               <div className="text-xs uppercase tracking-[0.22em] text-cyan">TradeBot OS</div>
             </div>
           </div>
@@ -124,7 +125,8 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="mt-5 flex gap-2 overflow-x-auto pb-1 xl:mt-8 xl:flex-col xl:overflow-visible xl:pb-0">
+        <div className="sidebar-section-title mt-6 hidden xl:block">Navigation</div>
+        <nav className="mt-5 flex gap-2 overflow-x-auto pb-1 xl:mt-3 xl:flex-col xl:overflow-visible xl:pb-0">
           {navItems.map(([to, label, Icon]) => (
             <NavLink
               className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
@@ -139,14 +141,15 @@ export default function App() {
         </nav>
 
         <div className="mt-7 hidden space-y-4 xl:block">
-          <div className="glass-card">
+          <div className="sidebar-section-title">System</div>
+          <div className="sidebar-card">
             <div className="label">Runtime mode</div>
             <div className="mt-3 text-lg font-bold text-white">{runtime.mode}</div>
             <p className="mt-2 text-xs leading-5 text-slate-400">
               Orders are simulated while the engine reads live/demo Binance market data.
             </p>
           </div>
-          <div className="glass-card">
+          <div className="sidebar-card">
             <div className="label">Safety rails</div>
             <div className="mt-4 space-y-3 text-sm">
               <CheckRow text="Paper execution enabled" />
@@ -157,8 +160,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="p-4 sm:p-6 lg:p-8">
-        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-4 shadow-glow lg:flex-row lg:items-center lg:justify-between">
+      <main className="dashboard-main p-4 sm:p-6 lg:p-8">
+        <div className="premium-topbar mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="label">Command surface</div>
             <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -167,9 +170,10 @@ export default function App() {
                 {connectionError ? "Degraded" : "Connected"}
               </span>
               <span className="pill">Paper mode</span>
+              <span className="pill">Dark terminal</span>
             </div>
             <p className={`mt-2 text-sm ${connectionError ? "text-rose-300" : "text-slate-400"}`}>
-              {connectionError || `Last sync ${lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : "pending"} · Binance demo market feed`}
+              {connectionError || `Last sync ${lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : "pending"} | Binance demo market feed`}
             </p>
           </div>
           <button className="button glow-button flex items-center justify-center gap-2" disabled={refreshing} onClick={() => void refresh()}>
@@ -219,13 +223,17 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden p-4">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(80,227,194,.16),transparent_34rem)]" />
-      <form className="glass-card relative w-full max-w-md p-7" onSubmit={submit}>
+      <form className="login-panel relative w-full max-w-md p-7" onSubmit={submit}>
         <div className="mb-6 flex items-center gap-3">
-          <div className="logo-orb"><Lock size={20} /></div>
+          <LogoMark compact />
           <div>
             <div className="label">Secure dashboard</div>
             <h1 className="text-3xl font-black">Enter Obsidra</h1>
           </div>
+        </div>
+        <div className="mb-5 flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+          <Lock size={14} className="text-cyan" />
+          Protected operator console
         </div>
         <p className="text-sm leading-6 text-slate-400">
           Operator access is protected by an httpOnly session cookie. No API keys are shown here.
