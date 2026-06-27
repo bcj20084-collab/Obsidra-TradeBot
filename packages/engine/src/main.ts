@@ -96,6 +96,7 @@ const PAPER_TRAILING_STOP_PCT = 1.5;
 const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
 const MARKET_SCANNER_INTERVAL_MS = 5 * 60_000;
+const SAFETY_SUPERVISOR_INTERVAL_MS = 10 * 60_000;
 
 interface TradingContext {
   exchange: ExchangeId;
@@ -275,6 +276,8 @@ async function bootstrap(): Promise<void> {
   void runAutoOptimizer();
   setInterval(() => void runMarketScanner(), MARKET_SCANNER_INTERVAL_MS).unref();
   void runMarketScanner();
+  setInterval(() => void runSafetySupervisor(), SAFETY_SUPERVISOR_INTERVAL_MS).unref();
+  void runSafetySupervisor();
   if (telegram.configured && env.TELEGRAM_STATUS_INTERVAL_MINUTES > 0) {
     setInterval(() => void sendTelegramStatus(), env.TELEGRAM_STATUS_INTERVAL_MINUTES * 60_000).unref();
   }
@@ -846,6 +849,53 @@ async function runMarketScanner(): Promise<void> {
     if (scans[0]) operatorLog("INFO", "AI MARKET SCANNER", `${scans[0].symbol} score ${scans[0].score} | ${scans[0].reason}`);
   } catch (error) {
     log.warn({ error }, "market scanner failed");
+  }
+}
+
+async function runSafetySupervisor(): Promise<void> {
+  try {
+    const since24h = new Date(Date.now() - 86_400_000);
+    const since6h = new Date(Date.now() - 6 * 3_600_000);
+    const [recentClosed, latestClosed, failedEvents, openTrades, readySignals, skippedSignals] = await Promise.all([
+      prisma.trade.findMany({ where: { status: "CLOSED", closedAt: { gte: since24h }, pnlUsdt: { not: null } }, select: { pnlUsdt: true } }),
+      prisma.trade.findMany({ where: { status: "CLOSED", pnlUsdt: { not: null } }, orderBy: { closedAt: "desc" }, take: 10, select: { pnlUsdt: true } }),
+      prisma.journalEntry.count({ where: { type: { contains: "FAILED" }, createdAt: { gte: since6h } } }),
+      prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } }, select: { positionSizeUsdt: true } }),
+      prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
+      prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
+    ]);
+    const recentPnl = recentClosed.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+    const lossStreakIndex = latestClosed.findIndex((trade) => (trade.pnlUsdt ?? 0) > 0);
+    const consecutiveLosses = lossStreakIndex === -1 ? latestClosed.length : lossStreakIndex;
+    const exposure = openTrades.reduce((sum, trade) => sum + trade.positionSizeUsdt, 0);
+    const danger = recentPnl < -25 || consecutiveLosses >= 4 || failedEvents >= 5;
+    const watch = danger || recentPnl < 0 || consecutiveLosses >= 2 || failedEvents >= 2 || (readySignals === 0 && skippedSignals === 0);
+    const level = danger ? "DANGER" : watch ? "WATCH" : "OK";
+    const summary = `${level} | pnl24h ${recentPnl.toFixed(2)} USDT | losses ${consecutiveLosses} | failed ${failedEvents} | exposure ${exposure.toFixed(2)} USDT`;
+    await journal.record("AI_SAFETY_SUPERVISOR", {
+      level,
+      recentPnl,
+      consecutiveLosses,
+      failedEvents,
+      openPositions: openTrades.length,
+      exposure,
+      readySignals,
+      skippedSignals,
+      summary,
+    });
+    await prisma.botEvent.create({
+      data: {
+        type: "AI_SAFETY_SUPERVISOR",
+        message: summary,
+        data: { level, recentPnl, consecutiveLosses, failedEvents, openPositions: openTrades.length, exposure, readySignals, skippedSignals },
+      },
+    });
+    operatorLog(level === "DANGER" ? "WARNING" : "INFO", "AI SAFETY SUPERVISOR", summary);
+    if (level === "DANGER" && telegram.configured) {
+      await telegram.alert("AI Safety Supervisor", summary, `safety:${level}:${consecutiveLosses}:${failedEvents}`);
+    }
+  } catch (error) {
+    log.warn({ error }, "safety supervisor failed");
   }
 }
 

@@ -76,4 +76,11 @@ export interface LiveMetrics {
   totalExposureUsdt?: number;
   openPositionsCount?: number;
   mlAccuracy?: number | null;
+  safetySupervisor?: {
+    level: "OK" | "WATCH" | "DANGER";
+    score: number;
+    summary: string;
+    checks: Array<{ name: string; status: "PASS" | "WATCH" | "FAIL"; detail: string }>;
+    updatedAt: string;
+  };
 }

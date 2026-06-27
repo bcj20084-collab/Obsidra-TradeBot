@@ -19,6 +19,15 @@ export interface Metrics {
   equityCurve: Array<{ date: string; equity: number }>;
   adaptiveConfig: Record<string, number>;
   perSymbolRegimes?: Array<{ symbol: string; regime: string; config: Record<string, number> }>;
+  safetySupervisor?: SafetySupervisorStatus;
+}
+
+export interface SafetySupervisorStatus {
+  level: "OK" | "WATCH" | "DANGER";
+  score: number;
+  summary: string;
+  checks: Array<{ name: string; status: "PASS" | "WATCH" | "FAIL"; detail: string }>;
+  updatedAt: string;
 }
 
 export interface Trade {
