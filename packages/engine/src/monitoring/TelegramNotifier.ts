@@ -215,6 +215,12 @@ export class TelegramNotifier {
         await this.handleCommand(update);
       }
     } catch (error) {
+      const message = errorMessage(error);
+      if (message.toLowerCase().includes("conflict")) {
+        this.pollingStarted = false;
+        log.warn({ error }, "Telegram command polling disabled because another getUpdates consumer is active; notifications remain enabled");
+        return;
+      }
       log.warn({ error }, "Telegram command polling failed");
     } finally {
       this.schedulePoll(1_000);
