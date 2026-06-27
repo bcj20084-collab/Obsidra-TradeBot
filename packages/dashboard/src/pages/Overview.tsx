@@ -2,6 +2,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap
 import type { Metrics, SignalFeedItem, Trade } from "../lib/types";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
+import { PremiumIntelligence } from "../components/PremiumIntelligence";
 import { SafetySupervisor } from "../components/SafetySupervisor";
 import { SignalFeed } from "../components/SignalFeed";
 import { TopBotParity } from "../components/TopBotParity";
@@ -59,6 +60,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
           </div>
         </div>
       </section>
+
+      <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
 
       <MetricsCards metrics={metrics} />
 

@@ -130,6 +130,59 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     @apply inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl font-black;
   }
 
+  .premium-command-grid {
+    @apply grid gap-6 2xl:grid-cols-[1.35fr_.65fr];
+  }
+
+  .premium-oracle {
+    @apply relative overflow-hidden p-6 md:p-7;
+    background:
+      linear-gradient(135deg, rgba(80,227,194,.12), transparent 36%),
+      radial-gradient(circle at 75% 12%, rgba(168,85,247,.18), transparent 22rem),
+      radial-gradient(circle at 18% 95%, rgba(251,191,36,.10), transparent 18rem),
+      rgba(255,255,255,.045);
+  }
+
+  .premium-oracle::before {
+    @apply pointer-events-none absolute inset-x-0 top-0 h-px content-[''];
+    background: linear-gradient(90deg, transparent, rgba(80,227,194,.8), transparent);
+  }
+
+  .premium-oracle::after {
+    @apply pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full content-[''];
+    background: radial-gradient(circle, rgba(80,227,194,.18), transparent 65%);
+    filter: blur(8px);
+  }
+
+  .premium-side-panel {
+    @apply overflow-hidden;
+    background:
+      radial-gradient(circle at 90% 0%, rgba(80,227,194,.16), transparent 18rem),
+      rgba(255,255,255,.045);
+  }
+
+  .live-orb {
+    @apply inline-flex min-w-[178px] items-center gap-3 rounded-[1.6rem] border border-cyan/20 bg-black/30 px-4 py-3 shadow-glow;
+  }
+
+  .live-orb span {
+    @apply h-4 w-4 rounded-full bg-emerald-400;
+    box-shadow: 0 0 0 8px rgba(52,211,153,.08), 0 0 28px rgba(52,211,153,.9);
+    animation: obsidra-pulse 1.9s ease-in-out infinite;
+  }
+
+  .intel-tile {
+    @apply rounded-[1.7rem] border border-white/10 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:bg-black/35;
+  }
+
+  .intel-cyan { box-shadow: inset 0 1px 0 rgba(80,227,194,.10); }
+  .intel-emerald { box-shadow: inset 0 1px 0 rgba(52,211,153,.10); }
+  .intel-violet { box-shadow: inset 0 1px 0 rgba(167,139,250,.10); }
+
+  .premium-latest {
+    @apply rounded-[1.7rem] border border-white/10 bg-black/25 p-4;
+  }
+
   .metric-tile {
     @apply rounded-3xl border border-white/10 bg-black/25 p-4;
   }
@@ -200,4 +253,9 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     @apply absolute -left-[1.22rem] top-5 h-3 w-3 rounded-full border border-cyan bg-obsidian;
     box-shadow: 0 0 18px rgba(80,227,194,.9);
   }
+}
+
+@keyframes obsidra-pulse {
+  0%, 100% { transform: scale(1); opacity: .82; }
+  50% { transform: scale(1.18); opacity: 1; }
 }
