@@ -1,7 +1,7 @@
-import { Activity, Bot, Clock3, RadioTower, ShieldCheck, TrendingUp } from "lucide-react";
+import { Activity, Bot, BrainCircuit, Clock3, RadioTower, ShieldCheck, TrendingUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchDeepHealth } from "../lib/api";
-import type { DeepHealth } from "../lib/types";
+import type { DeepHealth, LossBrainItem } from "../lib/types";
 
 export function DeepHealthPanel() {
   const [health, setHealth] = useState<DeepHealth | null>(null);
@@ -31,6 +31,7 @@ export function DeepHealthPanel() {
   const open = health?.latestOpenTrade ?? null;
   const protection = open?.protection ?? null;
   const openTrades = health?.openTrades?.length ? health.openTrades : open ? [open] : [];
+  const lossBrain = health?.latestLossBrain ?? [];
   const running = health?.ok && health.botStatus === "RUNNING" && health.db;
 
   return (
@@ -40,7 +41,7 @@ export function DeepHealthPanel() {
           <div className="label">Live bot black box</div>
           <h3 className="mt-2 text-2xl font-black">Execution heartbeat</h3>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Public-safe diagnostics for bot status, current paper position and protection logic. No keys, no secrets.
+            Public-safe diagnostics for bot status, current paper positions, protection logic and learning memory.
           </p>
         </div>
         <span className={`pill ${running ? "pill-success" : "pill-danger"}`}>
@@ -82,6 +83,21 @@ export function DeepHealthPanel() {
           </div>
           <div className="grid gap-3 xl:grid-cols-2">
             {openTrades.map((trade) => <RiskMapCard key={trade.id} trade={trade} />)}
+          </div>
+        </div>
+      ) : null}
+
+      {lossBrain.length ? (
+        <div className="mt-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Learning center</div>
+              <div className="mt-1 text-lg font-black text-white">Loss brain memory</div>
+            </div>
+            <span className="pill">{lossBrain.length} analyses</span>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2">
+            {lossBrain.slice(0, 4).map((item) => <LossBrainCard key={item.id} item={item} />)}
           </div>
         </div>
       ) : null}
@@ -180,6 +196,39 @@ function RiskMapCard({ trade }: { trade: NonNullable<DeepHealth["openTrades"]>[n
   );
 }
 
+function LossBrainCard({ item }: { item: LossBrainItem }) {
+  const severity = item.severity ?? "UNKNOWN";
+  return (
+    <div className={`rounded-3xl border p-4 ${severityClass(severity)}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex gap-3">
+          <div className="metric-icon tone-cyan"><BrainCircuit size={17} /></div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-lg font-black text-white">{item.symbol}</span>
+              {item.direction ? <span className={item.direction === "LONG" ? "direction-badge direction-long" : "direction-badge direction-short"}>{item.direction}</span> : null}
+            </div>
+            <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{item.primaryCategory ?? "LOSS_ANALYSIS"} · {new Date(item.createdAt).toLocaleTimeString()}</div>
+          </div>
+        </div>
+        <span className={`pill ${severity === "HIGH" ? "pill-danger" : severity === "LOW" ? "pill-success" : ""}`}>{severity}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+        <Mini label="PnL" value={item.pnlUsdt == null ? "—" : `${formatSigned(item.pnlUsdt)} USDT`} />
+        <Mini label="Penalty" value={item.suggestedScorePenalty == null ? "—" : `+${item.suggestedScorePenalty}`} />
+        <Mini label="Cooldown" value={item.suggestedCooldownMinutes == null ? "—" : `${item.suggestedCooldownMinutes}m`} />
+        <Mini label="Confidence" value={item.confidence == null ? "—" : `${(item.confidence * 100).toFixed(0)}%`} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-300">{item.summary ?? "Legacy loss analysis imported."}</p>
+      {item.recommendations.length ? (
+        <ul className="mt-3 space-y-1 text-xs leading-5 text-slate-400">
+          {item.recommendations.slice(0, 2).map((recommendation) => <li key={recommendation}>• {recommendation}</li>)}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -234,6 +283,13 @@ function riskStatus(profitR: number | null) {
   if (profitR != null && profitR <= -0.4) return { label: "WARNING", pill: "", className: "border-amber-400/30 bg-amber-400/10" };
   if (profitR != null && profitR >= 0.8) return { label: "PROFIT", pill: "pill-success", className: "border-emerald-400/30 bg-emerald-400/10" };
   return { label: "STABLE", pill: "", className: "border-cyan/15 bg-cyan/5" };
+}
+
+function severityClass(severity: string) {
+  if (severity === "HIGH") return "border-rose-500/35 bg-rose-500/10";
+  if (severity === "MEDIUM") return "border-amber-400/30 bg-amber-400/10";
+  if (severity === "LOW") return "border-emerald-400/30 bg-emerald-400/10";
+  return "border-white/10 bg-black/20";
 }
 
 function distancePct(current: number | null | undefined, target: number | null | undefined): string {
