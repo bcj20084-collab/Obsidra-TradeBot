@@ -50,6 +50,7 @@ export interface DeepHealth {
   }>;
   recentClosedTrades6h?: number;
   latestLossBrain?: LossBrainItem[];
+  autoTuner?: AutoTunerItem[];
   lastTradeAgeHours: number | null;
   signalsReady24h: number;
   signalsSkipped24h: number;
@@ -77,6 +78,21 @@ export interface LossBrainItem {
   suggestedCooldownMinutes: number | null;
   recommendations: string[];
   adaptiveActions: unknown[];
+}
+
+export interface AutoTunerItem {
+  symbol: string;
+  lossCount24h: number;
+  maxSeverity: string;
+  scorePenaltyActive: number;
+  cooldownMinutesActive: number;
+  lastCategory: string | null;
+  lastReason: string | null;
+  lastPnlUsdt: number | null;
+  lastPnlPct: number | null;
+  mode: string;
+  recommendation: string;
+  updatedAt: string;
 }
 
 export interface DeepOpenTrade {

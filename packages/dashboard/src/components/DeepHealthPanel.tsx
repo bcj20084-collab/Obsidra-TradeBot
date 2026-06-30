@@ -32,6 +32,7 @@ export function DeepHealthPanel() {
   const protection = open?.protection ?? null;
   const openTrades = health?.openTrades?.length ? health.openTrades : open ? [open] : [];
   const lossBrain = health?.latestLossBrain ?? [];
+  const autoTuner = health?.autoTuner ?? [];
   const running = health?.ok && health.botStatus === "RUNNING" && health.db;
 
   return (
@@ -98,6 +99,21 @@ export function DeepHealthPanel() {
           </div>
           <div className="grid gap-3 xl:grid-cols-2">
             {lossBrain.slice(0, 4).map((item) => <LossBrainCard key={item.id} item={item} />)}
+          </div>
+        </div>
+      ) : null}
+
+      {autoTuner.length ? (
+        <div className="mt-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Auto strategy tuner</div>
+              <div className="mt-1 text-lg font-black text-white">Active learning adjustments</div>
+            </div>
+            <span className="pill">{autoTuner.length} symbols tuned</span>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2">
+            {autoTuner.map((item) => <TunerCard key={item.symbol} item={item} />)}
           </div>
         </div>
       ) : null}
@@ -229,6 +245,30 @@ function LossBrainCard({ item }: { item: LossBrainItem }) {
   );
 }
 
+function TunerCard({ item }: { item: NonNullable<DeepHealth["autoTuner"]>[number] }) {
+  return (
+    <div className={`rounded-3xl border p-4 ${tunerClass(item.mode)}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-black text-white">{item.symbol}</span>
+            <span className="pill">{item.lossCount24h} losses / 24h</span>
+          </div>
+          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{item.lastCategory ?? "LOSS_MEMORY"} · {new Date(item.updatedAt).toLocaleTimeString()}</div>
+        </div>
+        <span className={`pill ${item.mode === "DEFENSIVE" ? "pill-danger" : item.mode === "WATCH" ? "pill-success" : ""}`}>{item.mode}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+        <Mini label="Penalty" value={`+${item.scorePenaltyActive}`} />
+        <Mini label="Cooldown" value={`${item.cooldownMinutesActive}m`} />
+        <Mini label="Severity" value={item.maxSeverity} />
+        <Mini label="Last PnL" value={item.lastPnlUsdt == null ? "—" : `${formatSigned(item.lastPnlUsdt)} USDT`} />
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-300">{item.recommendation}</p>
+    </div>
+  );
+}
+
 function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -290,6 +330,13 @@ function severityClass(severity: string) {
   if (severity === "MEDIUM") return "border-amber-400/30 bg-amber-400/10";
   if (severity === "LOW") return "border-emerald-400/30 bg-emerald-400/10";
   return "border-white/10 bg-black/20";
+}
+
+function tunerClass(mode: string) {
+  if (mode === "DEFENSIVE") return "border-rose-500/35 bg-rose-500/10";
+  if (mode === "CAUTIOUS") return "border-amber-400/30 bg-amber-400/10";
+  if (mode === "WATCH") return "border-emerald-400/30 bg-emerald-400/10";
+  return "border-cyan/15 bg-cyan/5";
 }
 
 function distancePct(current: number | null | undefined, target: number | null | undefined): string {

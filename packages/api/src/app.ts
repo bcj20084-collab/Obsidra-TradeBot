@@ -130,7 +130,7 @@ export function createApp() {
         prisma.journalEntry.findMany({
           where: { type: "TRADE_LOSS_ANALYZED", createdAt: { gte: since24h } },
           orderBy: { createdAt: "desc" },
-          take: 5,
+          take: 20,
           select: {
             id: true,
             data: true,
@@ -155,6 +155,7 @@ export function createApp() {
         prisma.$queryRaw`SELECT 1`,
       ]);
       const blockedByOpenPosition24h = riskRejectedEvents24h.filter((entry) => riskReason(entry.data) === "Open position already exists").length;
+      const publicLossBrain = latestLossBrain.map(publicLossBrainEntry);
       const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
       const lastTradeAgeHours = lastTradeAt ? (Date.now() - lastTradeAt.getTime()) / 3_600_000 : null;
       response.json({
@@ -186,7 +187,8 @@ export function createApp() {
         openTrades: openTrades.map(publicTradeSummary),
         recentTrades6h: recentTrades6h.map(publicTradeSummary),
         recentClosedTrades6h: recentTrades6h.filter((trade) => trade.closedAt).length,
-        latestLossBrain: latestLossBrain.map(publicLossBrain),
+        latestLossBrain: publicLossBrain.slice(0, 5),
+        autoTuner: buildAutoTuner(publicLossBrain),
         lastTradeAgeHours,
         signalsReady24h,
         signalsSkipped24h,
@@ -326,7 +328,7 @@ function publicTradeSummary(trade: {
   };
 }
 
-function publicLossBrain(entry: {
+function publicLossBrainEntry(entry: {
   id: string;
   data: unknown;
   createdAt: Date;
@@ -351,6 +353,68 @@ function publicLossBrain(entry: {
     recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter((item): item is string => typeof item === "string").slice(0, 4) : [],
     adaptiveActions: Array.isArray(data.adaptiveActions) ? data.adaptiveActions.slice(0, 4) : [],
   };
+}
+
+type PublicLossBrain = ReturnType<typeof publicLossBrainEntry>;
+
+function buildAutoTuner(entries: PublicLossBrain[]) {
+  const grouped = new Map<string, PublicLossBrain[]>();
+  for (const entry of entries) {
+    const list = grouped.get(entry.symbol) ?? [];
+    list.push(entry);
+    grouped.set(entry.symbol, list);
+  }
+  return [...grouped.entries()].map(([symbol, items]) => {
+    const maxPenalty = Math.max(0, ...items.map((item) => item.suggestedScorePenalty ?? inferredPenalty(item.severity)));
+    const maxCooldown = Math.max(0, ...items.map((item) => item.suggestedCooldownMinutes ?? inferredCooldown(item.severity)));
+    const maxSeverity = highestSeverity(items.map((item) => item.severity));
+    const latest = items[0]!;
+    return {
+      symbol,
+      lossCount24h: items.length,
+      maxSeverity,
+      scorePenaltyActive: maxPenalty,
+      cooldownMinutesActive: maxCooldown,
+      lastCategory: latest.primaryCategory,
+      lastReason: latest.closeReason,
+      lastPnlUsdt: latest.pnlUsdt,
+      lastPnlPct: latest.pnlPct,
+      mode: maxSeverity === "HIGH" ? "DEFENSIVE" : maxSeverity === "MEDIUM" ? "CAUTIOUS" : "WATCH",
+      recommendation: tunerRecommendation(maxSeverity, maxPenalty, maxCooldown),
+      updatedAt: latest.createdAt,
+    };
+  }).sort((left, right) => {
+    const order = { HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 } as Record<string, number>;
+    return (order[right.maxSeverity ?? "UNKNOWN"] ?? 0) - (order[left.maxSeverity ?? "UNKNOWN"] ?? 0);
+  });
+}
+
+function inferredPenalty(severity: string | null): number {
+  if (severity === "HIGH") return 8;
+  if (severity === "MEDIUM") return 5;
+  if (severity === "LOW") return 2;
+  return 0;
+}
+
+function inferredCooldown(severity: string | null): number {
+  if (severity === "HIGH") return 90;
+  if (severity === "MEDIUM") return 45;
+  if (severity === "LOW") return 20;
+  return 0;
+}
+
+function highestSeverity(values: Array<string | null>): string {
+  if (values.includes("HIGH")) return "HIGH";
+  if (values.includes("MEDIUM")) return "MEDIUM";
+  if (values.includes("LOW")) return "LOW";
+  return "UNKNOWN";
+}
+
+function tunerRecommendation(severity: string, penalty: number, cooldown: number): string {
+  if (severity === "HIGH") return `Defensive mode: require +${penalty} score and keep ${cooldown}m symbol cooldown after comparable losses.`;
+  if (severity === "MEDIUM") return `Cautious mode: require +${penalty} score and wait ${cooldown}m before similar re-entry.`;
+  if (severity === "LOW") return `Watch mode: small +${penalty} score guard active.`;
+  return "No active loss-based adjustment.";
 }
 
 function inferredSeverity(pnlPct: number | null): string | null {
