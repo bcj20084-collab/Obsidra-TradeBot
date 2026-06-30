@@ -81,6 +81,7 @@ function signal(): SignalResult {
     regime: "NORMAL",
     indicators: { atr: 1 },
     mlFeatures: {},
+    mlAdjustment: 0,
     timestamp: Date.now(),
   } as SignalResult;
 }
