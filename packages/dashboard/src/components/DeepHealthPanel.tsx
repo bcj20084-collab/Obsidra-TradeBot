@@ -70,6 +70,13 @@ export function DeepHealthPanel() {
             <Mini label="Size" value={`${open.positionSizeUsdt.toFixed(2)} USDT`} />
             <Mini label="Score" value={`${open.signalScore}/100`} />
           </div>
+          {protection ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <Mini label="Now" value={formatPrice(protection.currentPrice)} />
+              <Mini label="Unrealized PnL" value={`${formatSigned(protection.unrealizedPnlUsdt)} USDT`} />
+              <Mini label="Profit R" value={protection.profitR == null ? "—" : `${protection.profitR.toFixed(2)}R`} />
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             <ProtectionPill label="TP1" active={Boolean(protection?.tp1Hit)} />
             <ProtectionPill label="TP2" active={Boolean(protection?.tp2Hit)} />

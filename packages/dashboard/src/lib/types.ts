@@ -77,6 +77,9 @@ export interface PaperProtection {
   initialStopLoss: number | null;
   highestPrice: number | null;
   lowestPrice: number | null;
+  currentPrice: number | null;
+  unrealizedPnlUsdt: number | null;
+  profitR: number | null;
 }
 
 export interface Trade {

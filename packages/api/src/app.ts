@@ -189,6 +189,9 @@ function publicPaperProtection(signalData: unknown) {
     initialStopLoss: safeNumber(record.initialStopLoss),
     highestPrice: safeNumber(record.highestPrice),
     lowestPrice: safeNumber(record.lowestPrice),
+    currentPrice: safeNumber(record.currentPrice),
+    unrealizedPnlUsdt: safeNumber(record.unrealizedPnlUsdt),
+    profitR: safeNumber(record.profitR),
   };
 }
 

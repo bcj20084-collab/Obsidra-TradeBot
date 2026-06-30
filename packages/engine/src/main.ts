@@ -146,6 +146,9 @@ type PaperProtectionState = {
   trailingActivated?: boolean;
   highestPrice?: number;
   lowestPrice?: number;
+  currentPrice?: number;
+  unrealizedPnlUsdt?: number;
+  profitR?: number;
 };
 
 function contextKey(exchange: ExchangeId, symbol: string): string {
@@ -1020,11 +1023,19 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
     protection.initialStopLoss ??= trade.stopLoss;
     protection.highestPrice = Math.max(protection.highestPrice ?? trade.entryPrice, price);
     protection.lowestPrice = Math.min(protection.lowestPrice ?? trade.entryPrice, price);
-    await persistPaperProtectionState(trade.id, trade.signalData, protection);
 
     const hitStop = isLong ? price <= trade.stopLoss : price >= trade.stopLoss;
     const hitTakeProfit = isLong ? price >= trade.takeProfit : price <= trade.takeProfit;
     const timedOut = Date.now() - trade.openedAt.getTime() >= PAPER_TIMEOUT_MS;
+    const entry = trade.entryPrice;
+    const initialStop = protection.initialStopLoss ?? trade.stopLoss;
+    const initialRiskDistance = Math.abs(entry - initialStop);
+    const favorableMove = isLong ? price - entry : entry - price;
+    const quantity = entry > 0 ? (trade.positionSizeUsdt * trade.leverage) / entry : 0;
+    protection.currentPrice = price;
+    protection.unrealizedPnlUsdt = quantity > 0 ? (isLong ? price - entry : entry - price) * quantity : 0;
+    protection.profitR = initialRiskDistance > 0 ? favorableMove / initialRiskDistance : 0;
+    await persistPaperProtectionState(trade.id, trade.signalData, protection);
 
     if (hitStop) {
       await orderManager.close(trade.id, "paper_stop_loss");
@@ -1035,11 +1046,7 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
       return;
     }
 
-    const entry = trade.entryPrice;
-    const initialStop = protection.initialStopLoss ?? trade.stopLoss;
-    const initialRiskDistance = Math.abs(entry - initialStop);
     if (initialRiskDistance <= 0) return;
-    const favorableMove = isLong ? price - entry : entry - price;
     const profitR = favorableMove / initialRiskDistance;
 
     if (!protection.tp1Hit && profitR >= PAPER_PARTIAL_TP_L1_R) {
