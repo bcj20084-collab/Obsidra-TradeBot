@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap } from "lucide-react";
-import type { Metrics, SignalFeedItem, Trade } from "../lib/types";
+import type { Metrics, ReplayCandle, SignalFeedItem, Trade, TradeDetail } from "../lib/types";
 import { DeepHealthPanel } from "../components/DeepHealthPanel";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
@@ -8,15 +9,36 @@ import { SafetySupervisor } from "../components/SafetySupervisor";
 import { SignalDiagnostics } from "../components/SignalDiagnostics";
 import { SignalFeed } from "../components/SignalFeed";
 import { TopBotParity } from "../components/TopBotParity";
+import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
+import { trpc } from "../lib/api";
 
 export function Overview({ metrics, trades, signals }: { metrics: Metrics; trades: Trade[]; signals: SignalFeedItem[] }) {
+  const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
+  const [replayCandles, setReplayCandles] = useState<ReplayCandle[]>([]);
+  const [loadingReplay, setLoadingReplay] = useState(false);
   const equity = 10_000 + metrics.totalPnlUsdt;
   const openTrades = trades.filter((trade) => ["OPEN", "FILLED", "CLOSING"].includes(trade.status));
   const openPositions = metrics.openPositionsCount ?? openTrades.length;
   const closedTrades = trades.filter((trade) => trade.status === "CLOSED");
   const latestTrade = trades[0];
   const pnlPositive = metrics.totalPnlUsdt >= 0;
+
+  const openReplay = async (trade: Trade) => {
+    setLoadingReplay(true);
+    setSelectedTrade({ ...trade, transitions: [], journalEntries: [] });
+    setReplayCandles([]);
+    try {
+      const [detail, candles] = await Promise.all([
+        trpc.query("trades.detail", { id: trade.id }) as Promise<TradeDetail | null>,
+        trpc.query("trades.candles", { id: trade.id, interval: "15", limit: 220 }) as Promise<ReplayCandle[]>,
+      ]);
+      if (detail) setSelectedTrade(detail);
+      setReplayCandles(candles);
+    } finally {
+      setLoadingReplay(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -128,12 +150,14 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
           </div>
           <div className="pill">{closedTrades.length} closed</div>
         </div>
-        <TradeTable trades={trades.slice(0, 8)} compact />
+        <TradeTable trades={trades.slice(0, 8)} compact onSelect={openReplay} />
       </section>
 
       <SignalFeed items={signals} />
 
       <TopBotParity />
+
+      <TradeReplayPanel trade={selectedTrade} candles={replayCandles} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
     </div>
   );
 }
