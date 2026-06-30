@@ -8,10 +8,22 @@ import type { ExecutionJournal } from "./ExecutionJournal.js";
 import type { OrderStateMachine } from "./OrderStateMachine.js";
 import { calculateOrderQuantity } from "./ExecutionMath.js";
 import type { ClosedTradeNotification } from "../monitoring/TelegramNotifier.js";
+import { analyzeClosedTrade } from "../analysis/TradeAnalyzer.js";
 
 function serializeError(error: unknown): unknown {
   if (error instanceof Error) return { name: error.name, message: error.message, stack: error.stack };
   return String(error);
+}
+
+function paperProtectionFrom(signalData: unknown): { initialPositionSizeUsdt?: number; partialRealizedPnlUsdt?: number; partialFeeUsdt?: number } {
+  if (!signalData || typeof signalData !== "object") return {};
+  const protection = (signalData as Record<string, unknown>).paperProtection;
+  if (!protection || typeof protection !== "object") return {};
+  return protection as { initialPositionSizeUsdt?: number; partialRealizedPnlUsdt?: number; partialFeeUsdt?: number };
+}
+
+function jsonValue(value: unknown): never {
+  return JSON.parse(JSON.stringify(value)) as never;
 }
 
 export class OrderManager {
@@ -176,8 +188,13 @@ export class OrderManager {
       const grossPnl = trade.direction === "LONG"
         ? (exitPrice - trade.entryPrice) * quantity
         : (trade.entryPrice - exitPrice) * quantity;
-      const pnlUsdt = grossPnl - (trade.feeUsdt ?? 0) - result.feeUsdt;
-      const pnlPct = (pnlUsdt / Math.max(trade.positionSizeUsdt, Number.EPSILON)) * 100;
+      const paperProtection = paperProtectionFrom(trade.signalData);
+      const partialRealizedPnlUsdt = paperProtection.partialRealizedPnlUsdt ?? 0;
+      const feesAlreadyAppliedToPartialPnl = paperProtection.partialFeeUsdt ?? 0;
+      const remainingFeesUsdt = Math.max(0, (trade.feeUsdt ?? 0) - feesAlreadyAppliedToPartialPnl) + result.feeUsdt;
+      const pnlUsdt = partialRealizedPnlUsdt + grossPnl - remainingFeesUsdt;
+      const initialPositionSizeUsdt = paperProtection.initialPositionSizeUsdt ?? trade.positionSizeUsdt;
+      const pnlPct = (pnlUsdt / Math.max(initialPositionSizeUsdt, Number.EPSILON)) * 100;
       const holdTimeSeconds = trade.openedAt ? Math.max(0, Math.round((Date.now() - trade.openedAt.getTime()) / 1_000)) : 0;
       await prisma.trade.update({
         where: { id: trade.id },
@@ -192,6 +209,32 @@ export class OrderManager {
         },
       });
       await this.stateMachine.transition(trade.id, "CLOSED", reason, { exchangeOrderId: result.exchangeOrderId });
+      const lossAnalysis = analyzeClosedTrade({
+        symbol: trade.symbol,
+        direction: trade.direction,
+        entryPrice: trade.entryPrice,
+        exitPrice,
+        stopLoss: trade.stopLoss,
+        takeProfit: trade.takeProfit,
+        pnlUsdt,
+        pnlPct,
+        feeUsdt: (trade.feeUsdt ?? 0) + result.feeUsdt,
+        closeReason: reason,
+        signalScore: trade.signalScore,
+        marketRegime: trade.marketRegime,
+        holdTimeSeconds,
+      });
+      if (lossAnalysis) {
+        await this.journal.record("TRADE_LOSS_ANALYZED", lossAnalysis as unknown as Record<string, unknown>, trade.id);
+        await prisma.botEvent.create({
+          data: {
+            type: "TRADE_LOSS_ANALYZED",
+            symbol: trade.symbol,
+            message: lossAnalysis.summary,
+            data: jsonValue(lossAnalysis),
+          },
+        });
+      }
       premiumLog("execution", "order_closed", {
         tradeId: trade.id,
         symbol: trade.symbol,
@@ -204,6 +247,7 @@ export class OrderManager {
         feeUsdt: result.feeUsdt,
         quantity,
         reason,
+        lossAnalysis,
       }, "info", "premium order closed");
       operatorLog(
         pnlUsdt >= 0 ? "INFO" : "WARNING",

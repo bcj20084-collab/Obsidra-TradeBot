@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { AppError, ErrorCode, getEnv, moduleLogger, operatorBlock, operatorLog, premiumLog, prisma, strategyCatalog, tradingSymbols, type BotStatus, type Direction } from "@obsidra/shared";
 import { BybitRestClient } from "./data/BybitRestClient.js";
 import { BybitWebSocket } from "./data/BybitWebSocket.js";
@@ -94,6 +95,11 @@ let lastStatusBlockAt = 0;
 const PAPER_PROTECTION_INTERVAL_MS = 15_000;
 const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
 const PAPER_TRAILING_STOP_PCT = 1.5;
+const PAPER_PARTIAL_TP_L1_R = 1.0;
+const PAPER_PARTIAL_TP_L1_CLOSE_PCT = 20;
+const PAPER_PARTIAL_TP_L2_R = 2.0;
+const PAPER_PARTIAL_TP_L2_CLOSE_PCT = 20;
+const PAPER_BREAKEVEN_BUFFER_R = 0.1;
 const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
 const MARKET_SCANNER_INTERVAL_MS = 5 * 60_000;
@@ -128,6 +134,19 @@ interface TradingContext {
   signals: SignalEngine;
   risk: RiskEngine;
 }
+
+type PaperProtectionState = {
+  initialPositionSizeUsdt?: number;
+  initialStopLoss?: number;
+  partialRealizedPnlUsdt?: number;
+  partialFeeUsdt?: number;
+  tp1Hit?: boolean;
+  tp2Hit?: boolean;
+  breakevenMoved?: boolean;
+  trailingActivated?: boolean;
+  highestPrice?: number;
+  lowestPrice?: number;
+};
 
 function contextKey(exchange: ExchangeId, symbol: string): string {
   return `${exchange}:${symbol}`;
@@ -991,6 +1010,13 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
     if (!price || !Number.isFinite(price) || price <= 0) return;
 
     const isLong = trade.direction === "LONG";
+    const protection = paperProtectionState(trade.signalData);
+    protection.initialPositionSizeUsdt ??= trade.positionSizeUsdt;
+    protection.initialStopLoss ??= trade.stopLoss;
+    protection.highestPrice = Math.max(protection.highestPrice ?? trade.entryPrice, price);
+    protection.lowestPrice = Math.min(protection.lowestPrice ?? trade.entryPrice, price);
+    await persistPaperProtectionState(trade.id, trade.signalData, protection);
+
     const hitStop = isLong ? price <= trade.stopLoss : price >= trade.stopLoss;
     const hitTakeProfit = isLong ? price >= trade.takeProfit : price <= trade.takeProfit;
     const timedOut = Date.now() - trade.openedAt.getTime() >= PAPER_TIMEOUT_MS;
@@ -1003,41 +1029,59 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
       await orderManager.close(trade.id, "paper_take_profit");
       return;
     }
+
+    const entry = trade.entryPrice;
+    const initialStop = protection.initialStopLoss ?? trade.stopLoss;
+    const initialRiskDistance = Math.abs(entry - initialStop);
+    if (initialRiskDistance <= 0) return;
+    const favorableMove = isLong ? price - entry : entry - price;
+    const profitR = favorableMove / initialRiskDistance;
+
+    if (!protection.tp1Hit && profitR >= PAPER_PARTIAL_TP_L1_R) {
+      await closePaperPartial(trade.id, PAPER_PARTIAL_TP_L1_CLOSE_PCT, price, "paper_partial_tp1");
+      return;
+    }
+    if (protection.tp1Hit && !protection.tp2Hit && profitR >= PAPER_PARTIAL_TP_L2_R) {
+      await closePaperPartial(trade.id, PAPER_PARTIAL_TP_L2_CLOSE_PCT, price, "paper_partial_tp2");
+      return;
+    }
     if (timedOut) {
       await orderManager.close(trade.id, "paper_timeout_exit");
       return;
     }
 
     const currentStop = trade.stopLoss;
-    const entry = trade.entryPrice;
-    const riskDistance = Math.abs(entry - currentStop);
-    if (riskDistance <= 0) return;
-    const favorableMove = isLong ? price - entry : entry - price;
     if (favorableMove <= 0) return;
 
     let nextStop = currentStop;
     let reason: string | null = null;
-    const breakevenEligible = favorableMove >= riskDistance;
+    const breakevenEligible = profitR >= PAPER_PARTIAL_TP_L1_R || protection.tp1Hit;
     if (breakevenEligible) {
-      const breakevenStop = entry;
+      const breakevenBuffer = initialRiskDistance * PAPER_BREAKEVEN_BUFFER_R;
+      const breakevenStop = isLong ? entry + breakevenBuffer : entry - breakevenBuffer;
       const improvesStop = isLong ? breakevenStop > nextStop : breakevenStop < nextStop;
       if (improvesStop) {
         nextStop = breakevenStop;
         reason = "paper_breakeven_stop";
+        protection.breakevenMoved = true;
       }
     }
 
-    const trailingStop = isLong
-      ? price * (1 - PAPER_TRAILING_STOP_PCT / 100)
-      : price * (1 + PAPER_TRAILING_STOP_PCT / 100);
-    const improvesTrailing = isLong ? trailingStop > nextStop : trailingStop < nextStop;
-    if (improvesTrailing) {
-      nextStop = trailingStop;
-      reason = "paper_trailing_stop";
+    if (profitR >= PAPER_PARTIAL_TP_L2_R || protection.tp2Hit) {
+      const extreme = isLong ? protection.highestPrice ?? price : protection.lowestPrice ?? price;
+      const trailingStop = isLong
+        ? extreme * (1 - PAPER_TRAILING_STOP_PCT / 100)
+        : extreme * (1 + PAPER_TRAILING_STOP_PCT / 100);
+      const improvesTrailing = isLong ? trailingStop > nextStop : trailingStop < nextStop;
+      if (improvesTrailing) {
+        nextStop = trailingStop;
+        reason = "paper_trailing_stop";
+        protection.trailingActivated = true;
+      }
     }
 
     if (reason && Math.abs(nextStop - currentStop) / currentStop >= 0.0001) {
-      await prisma.trade.update({ where: { id: trade.id }, data: { stopLoss: nextStop } });
+      await prisma.trade.update({ where: { id: trade.id }, data: { stopLoss: nextStop, signalData: jsonValue(mergePaperProtectionState(trade.signalData, protection)) } });
       await journal.record("PAPER_PROTECTION_UPDATED", {
         symbol: trade.symbol,
         exchange,
@@ -1052,6 +1096,96 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
   } catch (error) {
     log.warn({ error, tradeId }, "paper protection monitor failed");
   }
+}
+
+function paperProtectionState(signalData: unknown): PaperProtectionState {
+  if (!signalData || typeof signalData !== "object") return {};
+  const value = (signalData as Record<string, unknown>).paperProtection;
+  return value && typeof value === "object" ? { ...(value as PaperProtectionState) } : {};
+}
+
+function mergePaperProtectionState(signalData: unknown, protection: PaperProtectionState): Record<string, unknown> {
+  const base = signalData && typeof signalData === "object" ? { ...(signalData as Record<string, unknown>) } : {};
+  return { ...base, paperProtection: protection };
+}
+
+function jsonValue(value: unknown): never {
+  return JSON.parse(JSON.stringify(value)) as never;
+}
+
+async function persistPaperProtectionState(tradeId: string, signalData: unknown, protection: PaperProtectionState): Promise<void> {
+  await prisma.trade.update({
+    where: { id: tradeId },
+    data: { signalData: jsonValue(mergePaperProtectionState(signalData, protection)) },
+  });
+}
+
+async function closePaperPartial(tradeId: string, closePct: number, markPrice: number, reason: "paper_partial_tp1" | "paper_partial_tp2"): Promise<void> {
+  const trade = await prisma.trade.findUnique({ where: { id: tradeId } });
+  if (!trade || !["OPEN", "FILLED"].includes(trade.status) || !trade.entryPrice || trade.positionSizeUsdt <= env.MIN_POSITION_USDT) return;
+  const exchange = trade.exchange as ExchangeId;
+  const adapter = exchanges.get(exchange);
+  const closeSizeUsdt = Math.min(
+    trade.positionSizeUsdt - env.MIN_POSITION_USDT,
+    trade.positionSizeUsdt * (closePct / 100),
+  );
+  if (closeSizeUsdt <= 0) return;
+  const qty = (closeSizeUsdt * trade.leverage) / trade.entryPrice;
+  const result = await exchanges.placeOrder(exchange, {
+    symbol: trade.symbol,
+    side: trade.direction === "LONG" ? "Sell" : "Buy",
+    orderType: "Market",
+    qty,
+    reduceOnly: true,
+    clientOrderId: `partial-${randomUUID()}`.slice(0, 36),
+  });
+  const exitPrice = result.avgFillPrice || markPrice;
+  const grossPnl = trade.direction === "LONG"
+    ? (exitPrice - trade.entryPrice) * qty
+    : (trade.entryPrice - exitPrice) * qty;
+  const netPnl = grossPnl - result.feeUsdt;
+  const protection = paperProtectionState(trade.signalData);
+  protection.initialPositionSizeUsdt ??= trade.positionSizeUsdt;
+  protection.initialStopLoss ??= trade.stopLoss;
+  protection.partialRealizedPnlUsdt = (protection.partialRealizedPnlUsdt ?? 0) + netPnl;
+  protection.partialFeeUsdt = (protection.partialFeeUsdt ?? 0) + result.feeUsdt;
+  if (reason === "paper_partial_tp1") protection.tp1Hit = true;
+  if (reason === "paper_partial_tp2") protection.tp2Hit = true;
+  const remainingSizeUsdt = Math.max(0, trade.positionSizeUsdt - closeSizeUsdt);
+  const nextStop = reason === "paper_partial_tp1"
+    ? (trade.direction === "LONG"
+      ? Math.max(trade.stopLoss, trade.entryPrice + Math.abs(trade.entryPrice - (protection.initialStopLoss ?? trade.stopLoss)) * PAPER_BREAKEVEN_BUFFER_R)
+      : Math.min(trade.stopLoss, trade.entryPrice - Math.abs(trade.entryPrice - (protection.initialStopLoss ?? trade.stopLoss)) * PAPER_BREAKEVEN_BUFFER_R))
+    : trade.stopLoss;
+  await prisma.trade.update({
+    where: { id: trade.id },
+    data: {
+      positionSizeUsdt: remainingSizeUsdt,
+      stopLoss: nextStop,
+      feeUsdt: (trade.feeUsdt ?? 0) + result.feeUsdt,
+      signalData: jsonValue(mergePaperProtectionState(trade.signalData, protection)),
+    },
+  });
+  await journal.record("PAPER_PARTIAL_TAKE_PROFIT", {
+    symbol: trade.symbol,
+    exchange,
+    direction: trade.direction,
+    reason,
+    closePct,
+    closeSizeUsdt,
+    remainingSizeUsdt,
+    exitPrice,
+    grossPnl,
+    netPnl,
+    feeUsdt: result.feeUsdt,
+    stopLoss: nextStop,
+    paperTrading: adapter.paperTrading,
+  }, trade.id);
+  operatorLog(
+    "INFO",
+    `PARTIAL TAKE PROFIT | ${trade.symbol}`,
+    `${reason}: closed ${closePct}% | Net PnL ${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)} USDT | Remaining ${remainingSizeUsdt.toFixed(2)} USDT | SL $${nextStop.toFixed(4)}`,
+  );
 }
 
 function average(values: number[]): number {
