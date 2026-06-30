@@ -82,11 +82,14 @@ export class RiskEngine {
     }
     const { config } = this.adaptive.snapshot;
     const basePositionSizeUsdt = calculatePositionSize(equity, trades, this.maxPositionUsdt, config.maxPositionPct);
+    const explorationSizeUsdt = this.adapter.paperTrading && basePositionSizeUsdt <= 0
+      ? Math.min(this.maxPositionUsdt, Math.max(10, equity * 0.005))
+      : basePositionSizeUsdt;
     const atrValue = signal.indicators.atr ?? 0;
     const atrLeverage = atrValue > 0 ? 0.02 / (atrValue / signal.entryPrice) : 1;
     const leverage = Math.max(1, Math.min(config.leverageMax, Math.floor(atrLeverage)));
     const positionSizeUsdt = capPositionByStopRisk(
-      basePositionSizeUsdt,
+      explorationSizeUsdt,
       equity,
       signal.entryPrice,
       signal.stopLoss,
@@ -116,6 +119,8 @@ export class RiskEngine {
       regime: signal.regime,
       equity,
       drawdownPct: drawdown,
+      basePositionSizeUsdt,
+      explorationSizeUsdt,
       positionSizeUsdt,
       leverage,
       riskRewardRatio,
