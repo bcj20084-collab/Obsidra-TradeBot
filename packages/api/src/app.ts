@@ -41,8 +41,9 @@ export function createApp() {
   }));
   app.get("/health/deep", async (_request, response) => {
     const since24h = new Date(Date.now() - 86_400_000);
+    const since6h = new Date(Date.now() - 6 * 3_600_000);
     try {
-      const [state, latestTrade, latestOpenTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.findFirst({
@@ -62,6 +63,66 @@ export function createApp() {
             leverage: true,
             signalScore: true,
             openedAt: true,
+            updatedAt: true,
+            signalData: true,
+          },
+        }),
+        prisma.trade.findMany({
+          where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            symbol: true,
+            exchange: true,
+            executionMode: true,
+            direction: true,
+            status: true,
+            entryPrice: true,
+            exitPrice: true,
+            stopLoss: true,
+            takeProfit: true,
+            positionSizeUsdt: true,
+            leverage: true,
+            pnlUsdt: true,
+            pnlPct: true,
+            closeReason: true,
+            signalScore: true,
+            openedAt: true,
+            closedAt: true,
+            updatedAt: true,
+            signalData: true,
+          },
+        }),
+        prisma.trade.findMany({
+          where: {
+            OR: [
+              { openedAt: { gte: since6h } },
+              { closedAt: { gte: since6h } },
+              { updatedAt: { gte: since6h }, status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            symbol: true,
+            exchange: true,
+            executionMode: true,
+            direction: true,
+            status: true,
+            entryPrice: true,
+            exitPrice: true,
+            stopLoss: true,
+            takeProfit: true,
+            positionSizeUsdt: true,
+            leverage: true,
+            pnlUsdt: true,
+            pnlPct: true,
+            closeReason: true,
+            signalScore: true,
+            openedAt: true,
+            closedAt: true,
             updatedAt: true,
             signalData: true,
           },
@@ -111,6 +172,9 @@ export function createApp() {
           updatedAt: latestOpenTrade.updatedAt,
           protection: publicPaperProtection(latestOpenTrade.signalData),
         } : null,
+        openTrades: openTrades.map(publicTradeSummary),
+        recentTrades6h: recentTrades6h.map(publicTradeSummary),
+        recentClosedTrades6h: recentTrades6h.filter((trade) => trade.closedAt).length,
         lastTradeAgeHours,
         signalsReady24h,
         signalsSkipped24h,
@@ -200,6 +264,52 @@ function publicPaperProtection(signalData: unknown) {
     currentPrice: safeNumber(record.currentPrice),
     unrealizedPnlUsdt: safeNumber(record.unrealizedPnlUsdt),
     profitR: safeNumber(record.profitR),
+  };
+}
+
+function publicTradeSummary(trade: {
+  id: string;
+  symbol: string;
+  exchange: string;
+  executionMode: string;
+  direction: string;
+  status: string;
+  entryPrice: number | null;
+  exitPrice: number | null;
+  stopLoss: number;
+  takeProfit: number;
+  positionSizeUsdt: number;
+  leverage: number;
+  pnlUsdt: number | null;
+  pnlPct: number | null;
+  closeReason: string | null;
+  signalScore: number;
+  openedAt: Date | null;
+  closedAt: Date | null;
+  updatedAt: Date;
+  signalData: unknown;
+}) {
+  return {
+    id: trade.id,
+    symbol: trade.symbol,
+    exchange: trade.exchange,
+    executionMode: trade.executionMode,
+    direction: trade.direction,
+    status: trade.status,
+    entryPrice: trade.entryPrice,
+    exitPrice: trade.exitPrice,
+    stopLoss: trade.stopLoss,
+    takeProfit: trade.takeProfit,
+    positionSizeUsdt: trade.positionSizeUsdt,
+    leverage: trade.leverage,
+    pnlUsdt: trade.pnlUsdt,
+    pnlPct: trade.pnlPct,
+    closeReason: trade.closeReason,
+    signalScore: trade.signalScore,
+    openedAt: trade.openedAt,
+    closedAt: trade.closedAt,
+    updatedAt: trade.updatedAt,
+    protection: publicPaperProtection(trade.signalData),
   };
 }
 

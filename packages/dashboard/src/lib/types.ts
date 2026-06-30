@@ -40,6 +40,15 @@ export interface DeepHealth {
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
   latestOpenTrade: DeepOpenTrade | null;
+  openTrades?: DeepOpenTrade[];
+  recentTrades6h?: Array<DeepOpenTrade & {
+    exitPrice: number | null;
+    pnlUsdt: number | null;
+    pnlPct: number | null;
+    closeReason: string | null;
+    closedAt: string | null;
+  }>;
+  recentClosedTrades6h?: number;
   lastTradeAgeHours: number | null;
   signalsReady24h: number;
   signalsSkipped24h: number;
