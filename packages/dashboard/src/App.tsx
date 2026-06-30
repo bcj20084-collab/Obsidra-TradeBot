@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   CandlestickChart,
@@ -16,13 +16,14 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { LogoMark } from "./components/LogoMark";
 import { hasSession, login, trpc } from "./lib/api";
 import type { Metrics, SignalFeedItem, Trade } from "./lib/types";
-import { Backtest } from "./pages/Backtest";
-import { Overview } from "./pages/Overview";
-import { Settings } from "./pages/Settings";
-import { Strategies } from "./pages/Strategies";
-import { Strategy } from "./pages/Strategy";
-import { Symbols } from "./pages/Symbols";
-import { Trades } from "./pages/Trades";
+
+const Overview = lazy(() => import("./pages/Overview").then((module) => ({ default: module.Overview })));
+const Trades = lazy(() => import("./pages/Trades").then((module) => ({ default: module.Trades })));
+const Strategy = lazy(() => import("./pages/Strategy").then((module) => ({ default: module.Strategy })));
+const Strategies = lazy(() => import("./pages/Strategies").then((module) => ({ default: module.Strategies })));
+const Backtest = lazy(() => import("./pages/Backtest").then((module) => ({ default: module.Backtest })));
+const Symbols = lazy(() => import("./pages/Symbols").then((module) => ({ default: module.Symbols })));
+const Settings = lazy(() => import("./pages/Settings").then((module) => ({ default: module.Settings })));
 
 const emptyMetrics: Metrics = {
   totalPnlUsdt: 0,
@@ -182,16 +183,18 @@ export default function App() {
           </button>
         </div>
 
-        <Routes>
-          <Route path="/" element={<Overview metrics={metrics} trades={trades} signals={signals} />} />
-          <Route path="/trades" element={<Trades trades={trades} />} />
-          <Route path="/strategy" element={<Strategy metrics={metrics} />} />
-          <Route path="/strategies" element={<Strategies />} />
-          <Route path="/backtest" element={<Backtest />} />
-          <Route path="/symbols" element={<Symbols />} />
-          <Route path="/settings" element={<Settings metrics={metrics} refresh={() => void refresh()} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<div className="empty-state">Loading premium module...</div>}>
+          <Routes>
+            <Route path="/" element={<Overview metrics={metrics} trades={trades} signals={signals} />} />
+            <Route path="/trades" element={<Trades trades={trades} />} />
+            <Route path="/strategy" element={<Strategy metrics={metrics} />} />
+            <Route path="/strategies" element={<Strategies />} />
+            <Route path="/backtest" element={<Backtest />} />
+            <Route path="/symbols" element={<Symbols />} />
+            <Route path="/settings" element={<Settings metrics={metrics} refresh={() => void refresh()} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
