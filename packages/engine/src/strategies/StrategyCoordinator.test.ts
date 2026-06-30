@@ -20,4 +20,11 @@ describe("StrategyCoordinator", () => {
     coordinator.open("bybit", "ETHUSDT", { strategyId: "trend-eth", type: "TREND", direction: "LONG", sizeUsdt: 150 });
     expect(coordinator.check("bybit", "ETHUSDT", "DCA", "LONG", 51, "dca-eth").reason).toMatch(/exposure/i);
   });
+
+  it("blocks pullback overlap with trend and scalp strategies", () => {
+    const coordinator = new StrategyCoordinator(false, 1_000);
+    coordinator.open("binance", "DOGEUSDT", { strategyId: "pullback-doge-4h", type: "PULLBACK", direction: "SHORT", sizeUsdt: 100 });
+    expect(coordinator.check("binance", "DOGEUSDT", "TREND", "SHORT", 50, "trend-doge").approved).toBe(false);
+    expect(coordinator.check("binance", "DOGEUSDT", "SCALP", "SHORT", 50, "scalp-doge").approved).toBe(false);
+  });
 });

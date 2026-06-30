@@ -62,6 +62,7 @@ export const envSchema = z
     MASTER_SECRET: z.string().min(32).default("development-only-master-secret-32"),
     ALLOWED_IPS: z.string().default(""),
     STRATEGY_TREND_ENABLED: boolString.default(true),
+    STRATEGY_PULLBACK_ENABLED: boolString.default(true),
     STRATEGY_GRID_ENABLED: boolString.default(false),
     STRATEGY_DCA_ENABLED: boolString.default(false),
     STRATEGY_SCALP_ENABLED: boolString.default(false),
@@ -69,6 +70,19 @@ export const envSchema = z
     TREND_SYMBOLS: z.string().default("BTCUSDT,ETHUSDT"),
     TREND_EXCHANGE: z.enum(["bybit", "binance"]).default("bybit"),
     TREND_PAPER_TRADING: boolString.default(true),
+    PULLBACK_SYMBOL: z.string().regex(/^[A-Z0-9]+$/).default("DOGEUSDT"),
+    PULLBACK_EXCHANGE: z.enum(["bybit", "binance"]).default("binance"),
+    PULLBACK_PAPER_TRADING: boolString.default(true),
+    PULLBACK_TIMEFRAME: z.enum(["15", "60", "240"]).default("240"),
+    PULLBACK_FAST_EMA: z.coerce.number().int().min(2).max(100).default(21),
+    PULLBACK_SLOW_EMA: z.coerce.number().int().min(10).max(300).default(89),
+    PULLBACK_RSI_LONG_BELOW: z.coerce.number().min(10).max(50).default(35),
+    PULLBACK_RSI_SHORT_ABOVE: z.coerce.number().min(50).max(90).default(55),
+    PULLBACK_ATR_STOP_MULTIPLIER: z.coerce.number().positive().max(10).default(1.2),
+    PULLBACK_ATR_TAKE_PROFIT_MULTIPLIER: z.coerce.number().positive().max(15).default(1.8),
+    PULLBACK_MAX_HOLD_CANDLES: z.coerce.number().int().min(1).max(240).default(72),
+    PULLBACK_MAX_DAILY_TRADES: z.coerce.number().int().min(1).max(20).default(4),
+    PULLBACK_MAX_POSITION_USDT: z.coerce.number().positive().default(150),
     GRID_SYMBOL: z.string().default("BTCUSDT"),
     GRID_EXCHANGE: z.enum(["bybit", "binance"]).default("binance"),
     GRID_UPPER_PRICE: z.coerce.number().positive().default(70_000),
@@ -114,8 +128,12 @@ export const envSchema = z
     if (env.GRID_LOWER_PRICE >= env.GRID_UPPER_PRICE) {
       ctx.addIssue({ code: "custom", message: "GRID_LOWER_PRICE must be below GRID_UPPER_PRICE", path: ["GRID_LOWER_PRICE"] });
     }
+    if (env.PULLBACK_FAST_EMA >= env.PULLBACK_SLOW_EMA) {
+      ctx.addIssue({ code: "custom", message: "PULLBACK_FAST_EMA must be below PULLBACK_SLOW_EMA", path: ["PULLBACK_FAST_EMA"] });
+    }
     const strategyModes = [
       [env.STRATEGY_TREND_ENABLED, env.TREND_EXCHANGE, env.TREND_PAPER_TRADING],
+      [env.STRATEGY_PULLBACK_ENABLED, env.PULLBACK_EXCHANGE, env.PULLBACK_PAPER_TRADING],
       [env.STRATEGY_GRID_ENABLED, env.GRID_EXCHANGE, env.GRID_PAPER_TRADING],
       [env.STRATEGY_DCA_ENABLED, env.DCA_EXCHANGE, env.DCA_PAPER_TRADING],
       [env.STRATEGY_SCALP_ENABLED, env.SCALP_EXCHANGE, env.SCALP_PAPER_TRADING],

@@ -1,6 +1,6 @@
 import type { OHLCVCandle, Position, ExchangeId } from "../exchanges/IExchangeAdapter.js";
 
-export type StrategyType = "TREND" | "GRID" | "DCA" | "SCALP" | "COPY";
+export type StrategyType = "TREND" | "PULLBACK" | "GRID" | "DCA" | "SCALP" | "COPY";
 export type StrategyStatus = "RUNNING" | "PAUSED" | "PAPER" | "STOPPED" | "ERROR";
 export interface StrategyConfig {
   id: string; type: StrategyType; exchange: ExchangeId; symbol: string; status: StrategyStatus;

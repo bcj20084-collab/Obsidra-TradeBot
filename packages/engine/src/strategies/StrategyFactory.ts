@@ -1,5 +1,6 @@
 import type { StrategyConfig, IStrategy } from "./IStrategy.js";
 import { TrendStrategy } from "./trend/TrendStrategy.js";
+import { PullbackStrategy } from "./pullback/PullbackStrategy.js";
 import { GridStrategy } from "./grid/GridStrategy.js";
 import { DCAStrategy } from "./dca/DCAStrategy.js";
 import { ScalpStrategy } from "./scalp/ScalpStrategy.js";
@@ -22,11 +23,13 @@ export interface StrategyDependencies {
   registerOpen(config: StrategyConfig, direction: Direction, sizeUsdt: number, symbol?: string): void;
   unregisterOpen(config: StrategyConfig, symbol?: string): void;
   onTrendCandle?(symbol: string, exchange: ExchangeId): Promise<void>;
+  watchTradeClose?(tradeId: string, exchange: ExchangeId, symbol: string, strategyId: string): Promise<void>;
 }
 
 export function createStrategy(config: StrategyConfig, dependencies: StrategyDependencies): IStrategy {
   switch (config.type) {
     case "TREND": return new TrendStrategy(config, dependencies.onTrendCandle);
+    case "PULLBACK": return new PullbackStrategy(config, dependencies);
     case "GRID": return new GridStrategy(config, dependencies.exchanges, dependencies);
     case "DCA": return new DCAStrategy(config, dependencies.exchanges, dependencies);
     case "SCALP": return new ScalpStrategy(config, dependencies);

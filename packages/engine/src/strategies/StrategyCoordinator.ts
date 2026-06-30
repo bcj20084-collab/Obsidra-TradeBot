@@ -10,6 +10,8 @@ export class StrategyCoordinator {
     const positions = this.active.get(`${exchange}:${symbol}`) ?? [];
     if (positions.some((p) => p.type === "GRID" && p.strategyId !== strategyId) || (type === "GRID" && positions.some((p) => p.strategyId !== strategyId))) return { approved: false, reason: "Grid strategy is exclusive on symbol/exchange" };
     if ((type === "SCALP" && positions.some((p) => p.type === "TREND")) || (type === "TREND" && positions.some((p) => p.type === "SCALP"))) return { approved: false, reason: "Scalp and Trend cannot overlap" };
+    if (type === "PULLBACK" && positions.some((p) => ["TREND", "SCALP"].includes(p.type))) return { approved: false, reason: "Pullback cannot overlap Trend/Scalp" };
+    if (["TREND", "SCALP"].includes(type) && positions.some((p) => p.type === "PULLBACK")) return { approved: false, reason: "Trend/Scalp cannot overlap Pullback" };
     if (!this.allowHedge && positions.some((p) => p.direction !== direction)) return { approved: false, reason: "Opposing position requires hedge permission" };
     if (positions.reduce((sum, p) => sum + p.sizeUsdt, 0) + sizeUsdt > this.perSymbolLimit) return { approved: false, reason: "Per-symbol exposure limit reached" };
     if (type === "DCA" && positions.some((p) => p.type === "TREND" && p.direction !== direction)) return { approved: false, reason: "DCA and Trend directions conflict" };

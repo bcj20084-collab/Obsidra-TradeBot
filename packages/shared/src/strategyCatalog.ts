@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 
-export type StrategyKind = "TREND" | "GRID" | "DCA" | "SCALP" | "COPY";
+export type StrategyKind = "TREND" | "PULLBACK" | "GRID" | "DCA" | "SCALP" | "COPY";
 export type StrategyExchange = "bybit" | "binance";
 
 export interface StrategyDescriptor {
@@ -31,6 +31,24 @@ export function strategyCatalog(env: Env): StrategyDescriptor[] {
   }));
   return [
     ...trend,
+    {
+      id: "pullback-doge-4h", type: "PULLBACK", enabled: env.STRATEGY_PULLBACK_ENABLED,
+      exchange: env.PULLBACK_EXCHANGE, symbol: env.PULLBACK_SYMBOL, isPaperTrading: env.PAPER_TRADING || env.PULLBACK_PAPER_TRADING,
+      maxPositionUsdt: Math.min(env.TRADING_POSITION_MAX_USDT, env.PULLBACK_MAX_POSITION_USDT),
+      dailyLossLimit: env.DAILY_LOSS_LIMIT_USDT,
+      maxDrawdownPct: env.MAX_DRAWDOWN_PCT,
+      params: {
+        timeframe: env.PULLBACK_TIMEFRAME,
+        fastEma: env.PULLBACK_FAST_EMA,
+        slowEma: env.PULLBACK_SLOW_EMA,
+        rsiLongBelow: env.PULLBACK_RSI_LONG_BELOW,
+        rsiShortAbove: env.PULLBACK_RSI_SHORT_ABOVE,
+        atrStopMultiplier: env.PULLBACK_ATR_STOP_MULTIPLIER,
+        atrTakeProfitMultiplier: env.PULLBACK_ATR_TAKE_PROFIT_MULTIPLIER,
+        maxHoldCandles: env.PULLBACK_MAX_HOLD_CANDLES,
+        maxDailyTrades: env.PULLBACK_MAX_DAILY_TRADES,
+      },
+    },
     {
       id: "grid-primary", type: "GRID", enabled: env.STRATEGY_GRID_ENABLED,
       exchange: env.GRID_EXCHANGE, symbol: env.GRID_SYMBOL, isPaperTrading: env.PAPER_TRADING || env.GRID_PAPER_TRADING,

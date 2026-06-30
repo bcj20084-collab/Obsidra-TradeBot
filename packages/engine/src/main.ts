@@ -274,6 +274,7 @@ const strategies = activeDescriptors.map((descriptor) => createStrategy({
     coordinator.close(config.exchange, symbol, config.id);
   },
   onTrendCandle: (symbol, exchange) => evaluate(exchange, symbol),
+  watchTradeClose,
 }));
 
 async function bootstrap(): Promise<void> {
@@ -455,7 +456,7 @@ async function restoreCoordinator(): Promise<void> {
       direction: trade.direction as Direction,
       sizeUsdt: trade.positionSizeUsdt,
     });
-    if ((descriptor?.type ?? "TREND") === "TREND") void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId);
+    if (["TREND", "PULLBACK"].includes(descriptor?.type ?? "TREND")) void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId);
   }
   for (const descriptor of descriptors.filter((item) => item.type === "GRID")) {
     const exposure = gridLevels.filter((level) => level.strategyId === descriptor.id).reduce((sum, level) => sum + level.orderSizeUsdt, 0);
