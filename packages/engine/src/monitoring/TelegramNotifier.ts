@@ -280,7 +280,7 @@ export class TelegramNotifier {
           return;
         case "/pause":
           await this.setBotStatus("PAUSED", "Telegram /pause");
-          await this.send(`${ICON.success} Intrările noi sunt <b>PAUSED</b>.\nPozițiile existente rămân monitorizate.`);
+          await this.send(`${ICON.success} Intrarile noi sunt <b>PAUSED</b>.\nPozitiile existente raman monitorizate.`);
           return;
         case "/resume":
           this.pendingKillUntil = 0;
@@ -291,15 +291,15 @@ export class TelegramNotifier {
           this.pendingKillUntil = Date.now() + 60_000;
           await this.send([
             `${ICON.warning} <b>CONFIRMARE KILL SWITCH</b>`,
-            "Această comandă oprește botul și anulează ordinele active.",
-            "Trimite <b>/confirm_kill</b> în următoarele 60 secunde.",
+            "Aceasta comanda opreste botul si anuleaza ordinele active.",
+            "Trimite <b>/confirm_kill</b> in urmatoarele 60 secunde.",
             "Pentru anulare: <b>/cancel</b>",
           ].join("\n"));
           return;
         case "/confirm_kill":
           if (Date.now() > this.pendingKillUntil) {
             this.pendingKillUntil = 0;
-            await this.send(`${ICON.lock} Confirmarea a expirat. Folosește din nou <b>/kill</b>.`);
+            await this.send(`${ICON.lock} Confirmarea a expirat. Foloseste din nou <b>/kill</b>.`);
             return;
           }
           this.pendingKillUntil = 0;
@@ -308,10 +308,10 @@ export class TelegramNotifier {
           return;
         case "/cancel":
           this.pendingKillUntil = 0;
-          await this.send(`${ICON.success} Acțiunea în așteptare a fost anulată.`);
+          await this.send(`${ICON.success} Actiunea in asteptare a fost anulata.`);
           return;
         default:
-          if (command?.startsWith("/")) await this.send(`Comandă necunoscută. Folosește <b>/help</b>.`);
+          if (command?.startsWith("/")) await this.send(`Comanda necunoscuta. Foloseste <b>/help</b>.`);
       }
     } catch (error) {
       log.warn({ error, command }, "Telegram command failed");
@@ -324,16 +324,16 @@ export class TelegramNotifier {
       `${ICON.bot} <b>OBSIDRA CONTROL PANEL</b>`,
       "",
       "<b>Monitorizare</b>",
-      "/status - stare bot și PnL azi",
-      "/positions - poziții deschise",
-      "/pnl - performanță azi / 7 zile / total",
-      "/trades - ultimele tranzacții",
+      "/status - stare bot si PnL azi",
+      "/positions - pozitii deschise",
+      "/pnl - performanta azi / 7 zile / total",
+      "/trades - ultimele tranzactii",
       "",
       "<b>Control</b>",
-      "/pause - oprește intrările noi",
-      "/resume - reia tranzacționarea",
-      "/kill - pornește confirmarea de urgență",
-      "/cancel - anulează confirmarea",
+      "/pause - opreste intrarile noi",
+      "/resume - reia tranzactionarea",
+      "/kill - porneste confirmarea de urgenta",
+      "/cancel - anuleaza confirmarea",
     ].join("\n"));
   }
 
@@ -372,11 +372,11 @@ export class TelegramNotifier {
       take: 10,
     });
     if (!trades.length) {
-      await this.send(`${ICON.position} Nu există poziții deschise.`);
+      await this.send(`${ICON.position} Nu exista pozitii deschise.`);
       return;
     }
     await this.send([
-      `${ICON.position} <b>POZIȚII DESCHISE (${trades.length})</b>`,
+      `${ICON.position} <b>POZITII DESCHISE (${trades.length})</b>`,
       ...trades.flatMap((trade) => [
         "",
         `<b>${escapeTelegramHtml(trade.symbol)} | ${escapeTelegramHtml(trade.direction)}</b>`,
@@ -408,8 +408,8 @@ export class TelegramNotifier {
     const week = summarize(weekStart);
     const total = summarize();
     await this.send([
-      `${ICON.money} <b>PERFORMANȚĂ</b>`,
-      `Astăzi: <b>${formatSigned(today.pnl)} USDT</b> | ${today.count} trades | ${today.winRate.toFixed(1)}% WR`,
+      `${ICON.money} <b>PERFORMANTA</b>`,
+      `Astazi: <b>${formatSigned(today.pnl)} USDT</b> | ${today.count} trades | ${today.winRate.toFixed(1)}% WR`,
       `7 zile: <b>${formatSigned(week.pnl)} USDT</b> | ${week.count} trades | ${week.winRate.toFixed(1)}% WR`,
       `Total: <b>${formatSigned(total.pnl)} USDT</b> | ${total.count} trades | ${total.winRate.toFixed(1)}% WR`,
       `Fees Total: <b>${total.fees.toFixed(2)} USDT</b>`,
@@ -419,11 +419,11 @@ export class TelegramNotifier {
   private async sendTrades(): Promise<void> {
     const trades = await prisma.trade.findMany({ orderBy: { createdAt: "desc" }, take: 10 });
     if (!trades.length) {
-      await this.send("Nicio tranzacție înregistrată.");
+      await this.send("Nicio tranzactie inregistrata.");
       return;
     }
     await this.send([
-      "<b>ULTIMELE TRANZACȚII</b>",
+      "<b>ULTIMELE TRANZACTII</b>",
       ...trades.map((trade) => {
         const icon = trade.pnlUsdt === null ? ICON.position : trade.pnlUsdt >= 0 ? ICON.success : ICON.loss;
         const result = trade.pnlUsdt === null ? trade.status : `${formatSigned(trade.pnlUsdt)} USDT`;

@@ -43,7 +43,7 @@ export function createApp() {
     const since24h = new Date(Date.now() - 86_400_000);
     const since6h = new Date(Date.now() - 6 * 3_600_000);
     try {
-      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, latestLossBrain, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.findFirst({
@@ -127,6 +127,17 @@ export function createApp() {
             signalData: true,
           },
         }),
+        prisma.journalEntry.findMany({
+          where: { type: "TRADE_LOSS_ANALYZED", createdAt: { gte: since24h } },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            data: true,
+            createdAt: true,
+            trade: { select: { symbol: true, direction: true, status: true, pnlUsdt: true, pnlPct: true, closeReason: true } },
+          },
+        }),
         prisma.trade.count({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
@@ -175,6 +186,7 @@ export function createApp() {
         openTrades: openTrades.map(publicTradeSummary),
         recentTrades6h: recentTrades6h.map(publicTradeSummary),
         recentClosedTrades6h: recentTrades6h.filter((trade) => trade.closedAt).length,
+        latestLossBrain: latestLossBrain.map(publicLossBrain),
         lastTradeAgeHours,
         signalsReady24h,
         signalsSkipped24h,
@@ -314,8 +326,39 @@ function publicTradeSummary(trade: {
   };
 }
 
+function publicLossBrain(entry: {
+  id: string;
+  data: unknown;
+  createdAt: Date;
+  trade: { symbol: string; direction: string; status: string; pnlUsdt: number | null; pnlPct: number | null; closeReason: string | null } | null;
+}) {
+  const data = entry.data && typeof entry.data === "object" ? entry.data as Record<string, unknown> : {};
+  return {
+    id: entry.id,
+    createdAt: entry.createdAt,
+    symbol: entry.trade?.symbol ?? "UNKNOWN",
+    direction: entry.trade?.direction ?? "",
+    status: entry.trade?.status ?? "",
+    pnlUsdt: entry.trade?.pnlUsdt ?? null,
+    pnlPct: entry.trade?.pnlPct ?? null,
+    closeReason: entry.trade?.closeReason ?? null,
+    primaryCategory: stringOrNull(data.primaryCategory),
+    severity: stringOrNull(data.severity),
+    confidence: safeNumber(data.confidence),
+    summary: stringOrNull(data.summary),
+    suggestedScorePenalty: safeNumber(data.suggestedScorePenalty),
+    suggestedCooldownMinutes: safeNumber(data.suggestedCooldownMinutes),
+    recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter((item): item is string => typeof item === "string").slice(0, 4) : [],
+    adaptiveActions: Array.isArray(data.adaptiveActions) ? data.adaptiveActions.slice(0, 4) : [],
+  };
+}
+
 function safeNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 function riskReason(data: unknown): string | null {

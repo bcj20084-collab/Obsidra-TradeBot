@@ -49,6 +49,7 @@ export interface DeepHealth {
     closedAt: string | null;
   }>;
   recentClosedTrades6h?: number;
+  latestLossBrain?: LossBrainItem[];
   lastTradeAgeHours: number | null;
   signalsReady24h: number;
   signalsSkipped24h: number;
@@ -57,6 +58,25 @@ export interface DeepHealth {
   actionableRiskRejected24h?: number;
   latestSignalEvent: { type: string; data: unknown; createdAt: string } | null;
   timestamp: string;
+}
+
+export interface LossBrainItem {
+  id: string;
+  createdAt: string;
+  symbol: string;
+  direction: string;
+  status: string;
+  pnlUsdt: number | null;
+  pnlPct: number | null;
+  closeReason: string | null;
+  primaryCategory: string | null;
+  severity: string | null;
+  confidence: number | null;
+  summary: string | null;
+  suggestedScorePenalty: number | null;
+  suggestedCooldownMinutes: number | null;
+  recommendations: string[];
+  adaptiveActions: unknown[];
 }
 
 export interface DeepOpenTrade {
