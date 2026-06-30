@@ -44,6 +44,8 @@ export interface DeepHealth {
   signalsReady24h: number;
   signalsSkipped24h: number;
   riskRejected24h: number;
+  riskBlockedByOpenPosition24h?: number;
+  actionableRiskRejected24h?: number;
   latestSignalEvent: { type: string; data: unknown; createdAt: string } | null;
   timestamp: string;
 }

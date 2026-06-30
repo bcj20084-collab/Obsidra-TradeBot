@@ -49,10 +49,26 @@ export function DeepHealthPanel() {
 
       <div className="mt-5 grid gap-3 md:grid-cols-4">
         <HealthStat icon={Bot} label="Bot" value={health?.botStatus ?? "Loading"} detail={health?.botReason ?? "Waiting for API"} />
-        <HealthStat icon={RadioTower} label="Signals 24h" value={`${health?.signalsReady24h ?? 0} ready`} detail={`${health?.signalsSkipped24h ?? 0} skipped / ${health?.riskRejected24h ?? 0} risk rejects`} />
+        <HealthStat icon={RadioTower} label="Signals 24h" value={`${health?.signalsReady24h ?? 0} ready`} detail={`${health?.signalsSkipped24h ?? 0} skipped / ${health?.actionableRiskRejected24h ?? health?.riskRejected24h ?? 0} actionable rejects`} />
         <HealthStat icon={Activity} label="Open paper trades" value={String(health?.openPositionsCount ?? 0)} detail={open ? `${open.symbol} ${open.direction}` : "No open position"} />
         <HealthStat icon={Clock3} label="Last update" value={health ? formatTime(health.timestamp) : "—"} detail={health ? `${Math.round(health.uptimeSeconds / 60)} min uptime` : "Polling every 15s"} />
       </div>
+
+      {health?.latestSignalEvent ? (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-300">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span className="label">Latest engine event</span>
+              <div className="mt-1 font-bold text-white">{health.latestSignalEvent.type}</div>
+            </div>
+            <span className="pill">{formatTime(health.latestSignalEvent.createdAt)}</span>
+          </div>
+          <p className="mt-3 leading-6 text-slate-400">
+            {eventSummary(health.latestSignalEvent.data)}
+            {health.riskBlockedByOpenPosition24h ? ` · ${health.riskBlockedByOpenPosition24h} duplicate entries blocked in 24h` : ""}
+          </p>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="mt-5 rounded-3xl border border-cyan/15 bg-cyan/5 p-5">
@@ -144,4 +160,18 @@ function formatPrice(value: number | null | undefined): string {
 function formatSigned(value: number | null | undefined): string {
   if (value == null) return "0.00";
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function eventSummary(data: unknown): string {
+  if (!data || typeof data !== "object") return "No event details yet.";
+  const record = data as Record<string, unknown>;
+  const symbol = stringFrom(record.symbol) ?? stringFrom((record.signal as Record<string, unknown> | undefined)?.symbol);
+  const reason = stringFrom(record.reason) ?? stringFrom((record.decision as Record<string, unknown> | undefined)?.reason);
+  if (reason === "Open position already exists") return `${symbol ?? "Signal"} was safely blocked because a position is already open.`;
+  if (reason) return `${symbol ?? "Signal"}: ${reason}`;
+  return symbol ? `${symbol} updated.` : "Engine heartbeat received.";
+}
+
+function stringFrom(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }

@@ -42,7 +42,7 @@ export function createApp() {
   app.get("/health/deep", async (_request, response) => {
     const since24h = new Date(Date.now() - 86_400_000);
     try {
-      const [state, latestTrade, latestOpenTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, latestSignalEvent, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.findFirst({
@@ -70,6 +70,11 @@ export function createApp() {
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
         prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since24h } } }),
+        prisma.journalEntry.findMany({
+          where: { type: "RISK_REJECTED", createdAt: { gte: since24h } },
+          select: { data: true },
+          take: 250,
+        }),
         prisma.journalEntry.findFirst({
           where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] } },
           orderBy: { createdAt: "desc" },
@@ -77,6 +82,7 @@ export function createApp() {
         }),
         prisma.$queryRaw`SELECT 1`,
       ]);
+      const blockedByOpenPosition24h = riskRejectedEvents24h.filter((entry) => riskReason(entry.data) === "Open position already exists").length;
       const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
       const lastTradeAgeHours = lastTradeAt ? (Date.now() - lastTradeAt.getTime()) / 3_600_000 : null;
       response.json({
@@ -109,6 +115,8 @@ export function createApp() {
         signalsReady24h,
         signalsSkipped24h,
         riskRejected24h,
+        riskBlockedByOpenPosition24h: blockedByOpenPosition24h,
+        actionableRiskRejected24h: Math.max(0, riskRejected24h - blockedByOpenPosition24h),
         latestSignalEvent,
         timestamp: new Date().toISOString(),
       });
@@ -197,4 +205,12 @@ function publicPaperProtection(signalData: unknown) {
 
 function safeNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function riskReason(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const decision = (data as Record<string, unknown>).decision;
+  if (!decision || typeof decision !== "object") return null;
+  const reason = (decision as Record<string, unknown>).reason;
+  return typeof reason === "string" ? reason : null;
 }
