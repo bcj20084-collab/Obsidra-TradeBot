@@ -42,9 +42,30 @@ export function createApp() {
   app.get("/health/deep", async (_request, response) => {
     const since24h = new Date(Date.now() - 86_400_000);
     try {
-      const [state, latestTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, latestSignalEvent, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, latestSignalEvent, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
+        prisma.trade.findFirst({
+          where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            symbol: true,
+            exchange: true,
+            executionMode: true,
+            direction: true,
+            status: true,
+            entryPrice: true,
+            stopLoss: true,
+            takeProfit: true,
+            positionSizeUsdt: true,
+            leverage: true,
+            signalScore: true,
+            openedAt: true,
+            updatedAt: true,
+            signalData: true,
+          },
+        }),
         prisma.trade.count({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
@@ -67,6 +88,23 @@ export function createApp() {
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
+        latestOpenTrade: latestOpenTrade ? {
+          id: latestOpenTrade.id,
+          symbol: latestOpenTrade.symbol,
+          exchange: latestOpenTrade.exchange,
+          executionMode: latestOpenTrade.executionMode,
+          direction: latestOpenTrade.direction,
+          status: latestOpenTrade.status,
+          entryPrice: latestOpenTrade.entryPrice,
+          stopLoss: latestOpenTrade.stopLoss,
+          takeProfit: latestOpenTrade.takeProfit,
+          positionSizeUsdt: latestOpenTrade.positionSizeUsdt,
+          leverage: latestOpenTrade.leverage,
+          signalScore: latestOpenTrade.signalScore,
+          openedAt: latestOpenTrade.openedAt,
+          updatedAt: latestOpenTrade.updatedAt,
+          protection: publicPaperProtection(latestOpenTrade.signalData),
+        } : null,
         lastTradeAgeHours,
         signalsReady24h,
         signalsSkipped24h,
@@ -133,4 +171,27 @@ function constantTimeEqual(left: string, right: string): boolean {
   let mismatch = left.length ^ right.length;
   for (let index = 0; index < length; index++) mismatch |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
   return mismatch === 0;
+}
+
+function publicPaperProtection(signalData: unknown) {
+  if (!signalData || typeof signalData !== "object") return null;
+  const protection = (signalData as Record<string, unknown>).paperProtection;
+  if (!protection || typeof protection !== "object") return null;
+  const record = protection as Record<string, unknown>;
+  return {
+    tp1Hit: Boolean(record.tp1Hit),
+    tp2Hit: Boolean(record.tp2Hit),
+    breakevenMoved: Boolean(record.breakevenMoved),
+    trailingActivated: Boolean(record.trailingActivated),
+    partialRealizedPnlUsdt: safeNumber(record.partialRealizedPnlUsdt),
+    partialFeeUsdt: safeNumber(record.partialFeeUsdt),
+    initialPositionSizeUsdt: safeNumber(record.initialPositionSizeUsdt),
+    initialStopLoss: safeNumber(record.initialStopLoss),
+    highestPrice: safeNumber(record.highestPrice),
+    lowestPrice: safeNumber(record.lowestPrice),
+  };
+}
+
+function safeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

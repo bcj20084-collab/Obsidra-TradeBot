@@ -1,5 +1,6 @@
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap } from "lucide-react";
 import type { Metrics, SignalFeedItem, Trade } from "../lib/types";
+import { DeepHealthPanel } from "../components/DeepHealthPanel";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
 import { PremiumIntelligence } from "../components/PremiumIntelligence";
@@ -65,6 +66,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
       <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
 
       <MetricsCards metrics={metrics} />
+
+      <DeepHealthPanel />
 
       <SafetySupervisor status={metrics.safetySupervisor} />
 

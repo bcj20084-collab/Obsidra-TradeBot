@@ -30,6 +30,55 @@ export interface SafetySupervisorStatus {
   updatedAt: string;
 }
 
+export interface DeepHealth {
+  ok: boolean;
+  service: string;
+  db: boolean;
+  botStatus: string;
+  botReason: string | null;
+  uptimeSeconds: number;
+  openPositionsCount: number;
+  latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
+  latestOpenTrade: DeepOpenTrade | null;
+  lastTradeAgeHours: number | null;
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  riskRejected24h: number;
+  latestSignalEvent: { type: string; data: unknown; createdAt: string } | null;
+  timestamp: string;
+}
+
+export interface DeepOpenTrade {
+  id: string;
+  symbol: string;
+  exchange: string;
+  executionMode: string;
+  direction: string;
+  status: string;
+  entryPrice: number | null;
+  stopLoss: number;
+  takeProfit: number;
+  positionSizeUsdt: number;
+  leverage: number;
+  signalScore: number;
+  openedAt: string | null;
+  updatedAt: string;
+  protection: PaperProtection | null;
+}
+
+export interface PaperProtection {
+  tp1Hit: boolean;
+  tp2Hit: boolean;
+  breakevenMoved: boolean;
+  trailingActivated: boolean;
+  partialRealizedPnlUsdt: number | null;
+  partialFeeUsdt: number | null;
+  initialPositionSizeUsdt: number | null;
+  initialStopLoss: number | null;
+  highestPrice: number | null;
+  lowestPrice: number | null;
+}
+
 export interface Trade {
   id: string;
   createdAt: string;
