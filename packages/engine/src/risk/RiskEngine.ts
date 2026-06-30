@@ -96,8 +96,11 @@ export class RiskEngine {
       leverage,
       this.maxRiskPerTradePct,
     );
-    if (positionSizeUsdt <= 0) return reject("Position sizing returned zero");
     const riskDistance = Math.abs(signal.entryPrice - signal.stopLoss);
+    const stopDistancePct = signal.entryPrice > 0 ? (riskDistance / signal.entryPrice) * 100 : 0;
+    if (positionSizeUsdt <= 0) {
+      return reject(`Position sizing returned zero: base=${basePositionSizeUsdt.toFixed(2)}, exploration=${explorationSizeUsdt.toFixed(2)}, equity=${equity.toFixed(2)}, leverage=${leverage}, stopDistance=${stopDistancePct.toFixed(3)}%`);
+    }
     const rewardDistance = Math.abs(signal.takeProfit - signal.entryPrice);
     const riskRewardRatio = rewardDistance / Math.max(riskDistance, Number.EPSILON);
     if (riskRewardRatio < 1.5) return reject(`Risk/reward ${riskRewardRatio.toFixed(2)} is below 1.5`);
