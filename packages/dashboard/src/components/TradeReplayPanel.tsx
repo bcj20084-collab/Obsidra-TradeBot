@@ -174,8 +174,12 @@ function ProtectionBrain({ trade }: { trade: TradeDetail }) {
         <div className="label">Loss brain</div>
         <div className="mt-4 grid gap-3">
           <BrainLine label="Category" value={String(lossAnalysis?.primaryCategory ?? "n/a")} />
+          <BrainLine label="Severity" value={String(lossAnalysis?.severity ?? "n/a")} />
+          <BrainLine label="Score penalty" value={lossAnalysis?.suggestedScorePenalty == null ? "-" : `+${String(lossAnalysis.suggestedScorePenalty)} required`} />
+          <BrainLine label="Cooldown" value={lossAnalysis?.suggestedCooldownMinutes == null ? "-" : `${String(lossAnalysis.suggestedCooldownMinutes)} min`} />
           <BrainLine label="Confidence" value={lossAnalysis?.confidence == null ? "-" : `${(Number(lossAnalysis.confidence) * 100).toFixed(0)}%`} />
           <p className="text-sm leading-6 text-slate-300">{String(lossAnalysis?.summary ?? "No loss analysis for winning/open trades.")}</p>
+          <p className="text-xs leading-5 text-slate-500">{firstAdaptiveAction(lossAnalysis)}</p>
         </div>
       </div>
     </div>
@@ -194,6 +198,13 @@ function readProtection(signalData: Record<string, unknown> | undefined) {
     breakevenMoved?: boolean;
     trailingActivated?: boolean;
   } : null;
+}
+
+function firstAdaptiveAction(lossAnalysis: Record<string, unknown> | undefined): string {
+  const actions = lossAnalysis?.adaptiveActions;
+  if (!Array.isArray(actions) || !actions.length) return "No adaptive action required yet.";
+  const first = actions[0] as Record<string, unknown>;
+  return `${String(first.action ?? "action")}: ${String(first.reason ?? "no reason")}`;
 }
 
 function ReplayStat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {

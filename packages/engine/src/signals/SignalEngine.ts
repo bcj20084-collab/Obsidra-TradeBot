@@ -82,6 +82,19 @@ function emaTrend(candles: Array<{ close: number }>, fast = 21, slow = 55): "LON
   return "NEUTRAL";
 }
 
+function lossBrainScorePenalty(entries: unknown[]): number {
+  let penalty = 0;
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const suggested = typeof record.suggestedScorePenalty === "number" && Number.isFinite(record.suggestedScorePenalty)
+      ? record.suggestedScorePenalty
+      : record.severity === "HIGH" ? 8 : record.severity === "MEDIUM" ? 5 : 2;
+    penalty += suggested;
+  }
+  return Math.min(14, penalty);
+}
+
 type IdleRelaxation = {
   idleHours: number | null;
   scoreRelaxation: number;
@@ -266,6 +279,16 @@ export class SignalEngine {
       take: 20,
       select: { pnlUsdt: true, feeUsdt: true },
     });
+    const recentLossBrain = await prisma.journalEntry.findMany({
+      where: {
+        type: "TRADE_LOSS_ANALYZED",
+        createdAt: { gte: new Date(Date.now() - 12 * 60 * 60_000) },
+        trade: { symbol },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { data: true },
+    });
     const recentWins = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
     const recentWinRate = recentTrades.length ? recentWins / recentTrades.length : 0.5;
     const recentWinSum = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0)
@@ -282,6 +305,8 @@ export class SignalEngine {
       if (recentLossStreak >= 2) symbolLearningAdjustment -= Math.min(12, recentLossStreak * 4);
       baseScore += symbolLearningAdjustment;
     }
+    const lossBrainPenalty = lossBrainScorePenalty(recentLossBrain.map((entry) => entry.data));
+    baseScore -= lossBrainPenalty;
     const features: MlFeatures = {
       rsi14Norm: rsiValue / 100,
       macdHistogramNorm: macdAtr,
@@ -358,6 +383,8 @@ export class SignalEngine {
       recentProfitFactor,
       recentLossStreak,
       symbolLearningAdjustment,
+      lossBrainPenalty,
+      recentLossBrainCount: recentLossBrain.length,
     };
     if (h1Conflict && !idle.rangingOverride && score < idle.minSignalScore + 8) {
       return { signal: null, reason: "HTF_CONFLICT", details: evaluationDetails };
