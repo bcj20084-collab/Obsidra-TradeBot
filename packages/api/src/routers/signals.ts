@@ -9,6 +9,7 @@ const signalTypes = [
   "RISK_REJECTED",
   "PAPER_PARTIAL_TAKE_PROFIT",
   "PAPER_PROTECTION_UPDATED",
+  "PAPER_POSITION_DANGER",
   "TRADE_LOSS_ANALYZED",
 ] as const;
 
@@ -30,6 +31,8 @@ type SignalFeedData = {
   price?: number;
   previousStop?: number;
   nextStop?: number;
+  profitR?: number;
+  unrealizedPnlUsdt?: number;
 };
 
 export const signalsRouter = router({

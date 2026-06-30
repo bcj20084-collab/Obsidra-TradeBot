@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const prismaMock = vi.hoisted(() => ({
   trade: {
     aggregate: vi.fn(),
+    findFirst: vi.fn(),
     findMany: vi.fn(),
   },
   dailyMetrics: {
@@ -26,6 +27,7 @@ describe("RiskEngine paper sizing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.trade.aggregate.mockResolvedValue({ _sum: { pnlUsdt: 0 } });
+    prismaMock.trade.findFirst.mockResolvedValue(null);
     prismaMock.dailyMetrics.findMany.mockResolvedValue([{ equityEnd: 1_000 }]);
   });
 
@@ -67,7 +69,49 @@ describe("RiskEngine paper sizing", () => {
     expect(decision.positionSizeUsdt).toBeLessThanOrEqual(50);
     expect(decision.reason).toBeUndefined();
   });
+
+  it("blocks immediate re-entry on the same symbol after a recent closed loss", async () => {
+    prismaMock.trade.findFirst.mockResolvedValue({
+      pnlUsdt: -2,
+      closedAt: new Date(Date.now() - 10 * 60_000),
+      closeReason: "paper_stop_loss",
+    });
+    prismaMock.trade.findMany.mockResolvedValue([]);
+    const engine = createEngine();
+
+    const decision = await engine.approve("BTCUSDT", signal());
+
+    expect(decision.approved).toBe(false);
+    expect(decision.reason).toMatch(/Symbol loss cooldown active/);
+  });
 });
+
+function createEngine(): RiskEngine {
+  return new RiskEngine(
+    500,
+    1_500,
+    30,
+    50,
+    { run: vi.fn().mockResolvedValue({ allowed: true }) } as unknown as PreFlightCheck,
+    {
+      exchangeId: "binance",
+      paperTrading: true,
+      getWalletBalance: vi.fn().mockResolvedValue(1_000),
+    } as unknown as IExchangeAdapter,
+    {
+      snapshot: {
+        config: {
+          maxPositionPct: 2,
+          leverageMax: 5,
+          trailingStopPct: 1.5,
+        },
+      },
+    } as AdaptiveParams,
+    0.5,
+    3,
+    60,
+  );
+}
 
 function signal(): SignalResult {
   return {

@@ -82,6 +82,7 @@ export interface PaperProtection {
   tp2Hit: boolean;
   breakevenMoved: boolean;
   trailingActivated: boolean;
+  dangerAlerted: boolean;
   partialRealizedPnlUsdt: number | null;
   partialFeeUsdt: number | null;
   initialPositionSizeUsdt: number | null;

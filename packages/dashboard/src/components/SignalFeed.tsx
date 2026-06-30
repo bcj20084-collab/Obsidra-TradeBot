@@ -8,6 +8,7 @@ const meta = {
   RISK_REJECTED: { icon: ShieldAlert, label: "Risk", className: "pill-danger" },
   PAPER_PARTIAL_TAKE_PROFIT: { icon: CheckCircle2, label: "Partial TP", className: "pill-success" },
   PAPER_PROTECTION_UPDATED: { icon: Wrench, label: "Protection", className: "" },
+  PAPER_POSITION_DANGER: { icon: ShieldAlert, label: "Near SL", className: "pill-danger" },
   TRADE_LOSS_ANALYZED: { icon: ShieldAlert, label: "Loss brain", className: "pill-danger" },
 };
 

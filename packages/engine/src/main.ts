@@ -100,6 +100,7 @@ const PAPER_PARTIAL_TP_L1_CLOSE_PCT = 20;
 const PAPER_PARTIAL_TP_L2_R = 2.0;
 const PAPER_PARTIAL_TP_L2_CLOSE_PCT = 20;
 const PAPER_BREAKEVEN_BUFFER_R = 0.1;
+const PAPER_DANGER_ALERT_R = -0.8;
 const AUTO_TRAINING_INTERVAL_MS = 30 * 60_000;
 const AUTO_OPTIMIZER_INTERVAL_MS = 15 * 60_000;
 const MARKET_SCANNER_INTERVAL_MS = 5 * 60_000;
@@ -144,6 +145,7 @@ type PaperProtectionState = {
   tp2Hit?: boolean;
   breakevenMoved?: boolean;
   trailingActivated?: boolean;
+  dangerAlerted?: boolean;
   highestPrice?: number;
   lowestPrice?: number;
   currentPrice?: number;
@@ -1036,6 +1038,34 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
     protection.unrealizedPnlUsdt = quantity > 0 ? (isLong ? price - entry : entry - price) * quantity : 0;
     protection.profitR = initialRiskDistance > 0 ? favorableMove / initialRiskDistance : 0;
     await persistPaperProtectionState(trade.id, trade.signalData, protection);
+    if (protection.profitR <= PAPER_DANGER_ALERT_R && !protection.dangerAlerted) {
+      protection.dangerAlerted = true;
+      await persistPaperProtectionState(trade.id, trade.signalData, protection);
+      await journal.record("PAPER_POSITION_DANGER", {
+        symbol: trade.symbol,
+        exchange,
+        direction: trade.direction,
+        price,
+        entryPrice: entry,
+        stopLoss: trade.stopLoss,
+        takeProfit: trade.takeProfit,
+        unrealizedPnlUsdt: protection.unrealizedPnlUsdt,
+        profitR: protection.profitR,
+        reason: "near_stop_loss",
+      }, trade.id);
+      operatorLog(
+        "WARNING",
+        `POSITION DANGER | ${trade.symbol}`,
+        `Near SL: ${protection.profitR.toFixed(2)}R | PnL ${protection.unrealizedPnlUsdt.toFixed(2)} USDT | price $${price.toFixed(4)} | SL $${trade.stopLoss.toFixed(4)}`,
+      );
+      if (telegram.configured) {
+        await telegram.alert(
+          `Position close to SL: ${trade.symbol}`,
+          `${trade.direction} paper trade is at ${protection.profitR.toFixed(2)}R (${protection.unrealizedPnlUsdt.toFixed(2)} USDT). Price ${price.toFixed(4)}, SL ${trade.stopLoss.toFixed(4)}.`,
+          `paper-danger:${trade.id}`,
+        );
+      }
+    }
 
     if (hitStop) {
       await orderManager.close(trade.id, "paper_stop_loss");

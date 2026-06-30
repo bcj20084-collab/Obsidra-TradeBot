@@ -67,6 +67,24 @@ export class RiskEngine {
     if (drawdown > this.maxDrawdownPct) return reject(`Maximum drawdown exceeded: ${drawdown.toFixed(2)}%`);
     const preflight = await this.preflight.run(symbol);
     if (!preflight.allowed) return reject(preflight.reason ?? "Pre-flight rejected");
+    const lastSymbolTrade = await prisma.trade.findFirst({
+      where: {
+        exchange: this.adapter.exchangeId,
+        symbol,
+        status: "CLOSED",
+        pnlUsdt: { not: null },
+        closedAt: { not: null },
+      },
+      orderBy: { closedAt: "desc" },
+      select: { pnlUsdt: true, closedAt: true, closeReason: true },
+    });
+    const symbolCooldownMinutes = Math.max(15, Math.min(90, Math.round(this.lossCooldownMinutes / 2)));
+    if ((lastSymbolTrade?.pnlUsdt ?? 0) < 0 && lastSymbolTrade?.closedAt) {
+      const minutesSinceLoss = (Date.now() - lastSymbolTrade.closedAt.getTime()) / 60_000;
+      if (minutesSinceLoss < symbolCooldownMinutes) {
+        return reject(`Symbol loss cooldown active for ${symbol}: last loss ${minutesSinceLoss.toFixed(0)}m ago (${lastSymbolTrade.closeReason ?? "closed loss"}), wait ${Math.ceil(symbolCooldownMinutes - minutesSinceLoss)}m`);
+      }
+    }
     const trades = await prisma.trade.findMany({
       where: { exchange: this.adapter.exchangeId, pnlUsdt: { not: null } },
       orderBy: { closedAt: "desc" },

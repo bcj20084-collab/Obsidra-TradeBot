@@ -30,6 +30,7 @@ export function DeepHealthPanel() {
 
   const open = health?.latestOpenTrade ?? null;
   const protection = open?.protection ?? null;
+  const openTrades = health?.openTrades?.length ? health.openTrades : open ? [open] : [];
   const running = health?.ok && health.botStatus === "RUNNING" && health.db;
 
   return (
@@ -70,6 +71,21 @@ export function DeepHealthPanel() {
         </div>
       ) : null}
 
+      {openTrades.length ? (
+        <div className="mt-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Premium risk map</div>
+              <div className="mt-1 text-lg font-black text-white">Open position radar</div>
+            </div>
+            <span className="pill">{openTrades.length} active</span>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2">
+            {openTrades.map((trade) => <RiskMapCard key={trade.id} trade={trade} />)}
+          </div>
+        </div>
+      ) : null}
+
       {open ? (
         <div className="mt-5 rounded-3xl border border-cyan/15 bg-cyan/5 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -105,6 +121,7 @@ export function DeepHealthPanel() {
               <span className="pill">Fees {formatPrice(protection.partialFeeUsdt)}</span>
               <span className="pill">High {formatPrice(protection.highestPrice)}</span>
               <span className="pill">Low {formatPrice(protection.lowestPrice)}</span>
+              {protection.dangerAlerted ? <span className="pill pill-danger">Danger alert sent</span> : null}
             </div>
           ) : null}
         </div>
@@ -124,6 +141,41 @@ function HealthStat({ icon: Icon, label, value, detail }: { icon: typeof Trendin
       <div className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-1 truncate text-lg font-black">{value}</div>
       <div className="mt-1 truncate text-xs text-slate-500">{detail}</div>
+    </div>
+  );
+}
+
+function RiskMapCard({ trade }: { trade: NonNullable<DeepHealth["openTrades"]>[number] }) {
+  const protection = trade.protection;
+  const risk = riskStatus(protection?.profitR ?? null);
+  return (
+    <div className={`rounded-3xl border p-4 ${risk.className}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-black text-white">{trade.symbol}</span>
+            <span className={trade.direction === "LONG" ? "direction-badge direction-long" : "direction-badge direction-short"}>{trade.direction}</span>
+          </div>
+          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{trade.exchange} · {trade.executionMode}</div>
+        </div>
+        <span className={`pill ${risk.pill}`}>{risk.label}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+        <Mini label="Now" value={formatPrice(protection?.currentPrice)} />
+        <Mini label="PnL" value={`${formatSigned(protection?.unrealizedPnlUsdt)} USDT`} />
+        <Mini label="R" value={protection?.profitR == null ? "—" : `${protection.profitR.toFixed(2)}R`} />
+        <Mini label="Size" value={`${trade.positionSizeUsdt.toFixed(2)} USDT`} />
+      </div>
+      <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <div className="text-slate-500">Distance to SL</div>
+          <div className="mt-1 font-mono font-bold text-rose-200">{distancePct(protection?.currentPrice, trade.stopLoss)}</div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <div className="text-slate-500">Distance to TP</div>
+          <div className="mt-1 font-mono font-bold text-emerald-200">{distancePct(protection?.currentPrice, trade.takeProfit)}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -168,10 +220,23 @@ function eventSummary(data: unknown): string {
   const symbol = stringFrom(record.symbol) ?? stringFrom((record.signal as Record<string, unknown> | undefined)?.symbol);
   const reason = stringFrom(record.reason) ?? stringFrom((record.decision as Record<string, unknown> | undefined)?.reason);
   if (reason === "Open position already exists") return `${symbol ?? "Signal"} was safely blocked because a position is already open.`;
+  if (reason === "near_stop_loss") return `${symbol ?? "Position"} is close to stop loss.`;
   if (reason) return `${symbol ?? "Signal"}: ${reason}`;
   return symbol ? `${symbol} updated.` : "Engine heartbeat received.";
 }
 
 function stringFrom(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function riskStatus(profitR: number | null) {
+  if (profitR != null && profitR <= -0.8) return { label: "DANGER", pill: "pill-danger", className: "border-rose-500/35 bg-rose-500/10" };
+  if (profitR != null && profitR <= -0.4) return { label: "WARNING", pill: "", className: "border-amber-400/30 bg-amber-400/10" };
+  if (profitR != null && profitR >= 0.8) return { label: "PROFIT", pill: "pill-success", className: "border-emerald-400/30 bg-emerald-400/10" };
+  return { label: "STABLE", pill: "", className: "border-cyan/15 bg-cyan/5" };
+}
+
+function distancePct(current: number | null | undefined, target: number | null | undefined): string {
+  if (!current || !target) return "—";
+  return `${((Math.abs(current - target) / current) * 100).toFixed(2)}%`;
 }

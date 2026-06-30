@@ -255,6 +255,7 @@ function publicPaperProtection(signalData: unknown) {
     tp2Hit: Boolean(record.tp2Hit),
     breakevenMoved: Boolean(record.breakevenMoved),
     trailingActivated: Boolean(record.trailingActivated),
+    dangerAlerted: Boolean(record.dangerAlerted),
     partialRealizedPnlUsdt: safeNumber(record.partialRealizedPnlUsdt),
     partialFeeUsdt: safeNumber(record.partialFeeUsdt),
     initialPositionSizeUsdt: safeNumber(record.initialPositionSizeUsdt),
