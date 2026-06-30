@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { compare } from "bcryptjs";
-import { getEnv, prisma } from "@obsidra/shared";
+import { getEnv, prisma, strategyCatalog } from "@obsidra/shared";
 import { clearSession, createSession, readSession } from "./auth/session.js";
 import { ipWhitelist } from "./middleware/ipWhitelist.js";
 import { clearLoginAttempts, loginRateLimiter } from "./middleware/rateLimiter.js";
@@ -15,6 +15,14 @@ import { createContext } from "./trpc.js";
 export function createApp() {
   const env = getEnv();
   const app = express();
+  const activeStrategies = strategyCatalog(env).filter((strategy) => strategy.enabled).map((strategy) => ({
+    id: strategy.id,
+    type: strategy.type,
+    exchange: strategy.exchange,
+    symbol: strategy.symbol,
+    mode: strategy.isPaperTrading ? "PAPER" : "LIVE",
+    params: strategy.params,
+  }));
   app.disable("x-powered-by");
   app.use((_request, response, next) => {
     response.set({
@@ -164,6 +172,7 @@ export function createApp() {
         db: Boolean(dbCheck),
         botStatus: state?.status ?? "UNKNOWN",
         botReason: state?.reason ?? null,
+        activeStrategies,
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,

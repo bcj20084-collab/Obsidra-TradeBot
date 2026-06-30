@@ -36,6 +36,14 @@ export interface DeepHealth {
   db: boolean;
   botStatus: string;
   botReason: string | null;
+  activeStrategies?: Array<{
+    id: string;
+    type: string;
+    exchange: string;
+    symbol: string;
+    mode: string;
+    params: Record<string, unknown>;
+  }>;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;

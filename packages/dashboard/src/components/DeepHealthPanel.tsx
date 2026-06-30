@@ -33,6 +33,7 @@ export function DeepHealthPanel() {
   const openTrades = health?.openTrades?.length ? health.openTrades : open ? [open] : [];
   const lossBrain = health?.latestLossBrain ?? [];
   const autoTuner = health?.autoTuner ?? [];
+  const activeStrategies = health?.activeStrategies ?? [];
   const running = health?.ok && health.botStatus === "RUNNING" && health.db;
 
   return (
@@ -56,6 +57,29 @@ export function DeepHealthPanel() {
         <HealthStat icon={Activity} label="Open paper trades" value={String(health?.openPositionsCount ?? 0)} detail={open ? `${open.symbol} ${open.direction}` : "No open position"} />
         <HealthStat icon={Clock3} label="Last update" value={health ? formatTime(health.timestamp) : "—"} detail={health ? `${Math.round(health.uptimeSeconds / 60)} min uptime` : "Polling every 15s"} />
       </div>
+
+      {activeStrategies.length ? (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Active strategies</div>
+              <div className="mt-1 text-sm font-bold text-white">Paper/live strategy roster from running config</div>
+            </div>
+            <span className="pill">{activeStrategies.length} enabled</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {activeStrategies.map((strategy) => (
+              <div key={strategy.id} className="rounded-2xl border border-cyan/10 bg-cyan/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-white">{strategy.symbol}</span>
+                  <span className={strategy.mode === "PAPER" ? "pill pill-success" : "pill pill-danger"}>{strategy.mode}</span>
+                </div>
+                <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{strategy.type} / {strategy.exchange}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {health?.latestSignalEvent ? (
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-300">
