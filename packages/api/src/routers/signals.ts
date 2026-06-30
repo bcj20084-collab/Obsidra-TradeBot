@@ -7,7 +7,9 @@ const signalTypes = [
   "SIGNAL_SKIPPED",
   "SIGNAL_GENERATED",
   "RISK_REJECTED",
+  "PAPER_PARTIAL_TAKE_PROFIT",
   "PAPER_PROTECTION_UPDATED",
+  "TRADE_LOSS_ANALYZED",
 ] as const;
 
 type SignalFeedData = {

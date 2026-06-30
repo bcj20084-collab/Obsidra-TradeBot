@@ -61,6 +61,8 @@ export function TradeReplayPanel({
               <ReplayStat icon={Clock} label="Hold" value={trade.holdTimeSeconds == null ? "-" : `${Math.round(trade.holdTimeSeconds / 60)}m`} />
             </div>
 
+            <ProtectionBrain trade={trade} />
+
             <TradeReplayChart trade={trade} candles={candles} />
 
             <div className="glass-card">
@@ -137,10 +139,61 @@ function buildTimeline(trade: TradeDetail) {
 function summarize(data: unknown): string {
   if (!data || typeof data !== "object") return String(data ?? "");
   const record = data as Record<string, unknown>;
-  const important = ["reason", "status", "price", "previousStop", "nextStop", "pnl", "savedWeights", "mode"]
+  const important = ["reason", "primaryCategory", "summary", "price", "previousStop", "nextStop", "netPnl", "remainingSizeUsdt", "stopLoss", "mode"]
     .filter((key) => key in record)
     .map((key) => `${key}: ${String(record[key])}`);
   return important.length ? important.join(" | ") : JSON.stringify(record).slice(0, 240);
+}
+
+function ProtectionBrain({ trade }: { trade: TradeDetail }) {
+  const protection = readProtection(trade.signalData);
+  const lossAnalysis = trade.journalEntries.find((item) => item.type === "TRADE_LOSS_ANALYZED")?.data as Record<string, unknown> | undefined;
+  const partials = trade.journalEntries.filter((item) => item.type === "PAPER_PARTIAL_TAKE_PROFIT");
+  if (!protection && !lossAnalysis && !partials.length) return null;
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="glass-card">
+        <div className="label">Protection engine</div>
+        <div className="mt-4 grid gap-3">
+          <BrainLine label="TP1" value={protection?.tp1Hit ? "Hit" : "Waiting"} />
+          <BrainLine label="TP2" value={protection?.tp2Hit ? "Hit" : "Waiting"} />
+          <BrainLine label="Breakeven" value={protection?.breakevenMoved ? "Moved" : "Not yet"} />
+          <BrainLine label="Trailing" value={protection?.trailingActivated ? "Active" : "Inactive"} />
+        </div>
+      </div>
+      <div className="glass-card">
+        <div className="label">Partial PnL</div>
+        <div className="mt-4 grid gap-3">
+          <BrainLine label="Events" value={String(partials.length)} />
+          <BrainLine label="Realized" value={`${formatSigned(Number(protection?.partialRealizedPnlUsdt ?? 0))} USDT`} />
+          <BrainLine label="Fees" value={`${Number(protection?.partialFeeUsdt ?? 0).toFixed(2)} USDT`} />
+          <BrainLine label="Initial size" value={`${Number(protection?.initialPositionSizeUsdt ?? 0).toFixed(2)} USDT`} />
+        </div>
+      </div>
+      <div className="glass-card">
+        <div className="label">Loss brain</div>
+        <div className="mt-4 grid gap-3">
+          <BrainLine label="Category" value={String(lossAnalysis?.primaryCategory ?? "n/a")} />
+          <BrainLine label="Confidence" value={lossAnalysis?.confidence == null ? "-" : `${(Number(lossAnalysis.confidence) * 100).toFixed(0)}%`} />
+          <p className="text-sm leading-6 text-slate-300">{String(lossAnalysis?.summary ?? "No loss analysis for winning/open trades.")}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function readProtection(signalData: Record<string, unknown> | undefined) {
+  const value = signalData?.paperProtection;
+  return value && typeof value === "object" ? value as {
+    initialPositionSizeUsdt?: number;
+    initialStopLoss?: number;
+    partialRealizedPnlUsdt?: number;
+    partialFeeUsdt?: number;
+    tp1Hit?: boolean;
+    tp2Hit?: boolean;
+    breakevenMoved?: boolean;
+    trailingActivated?: boolean;
+  } : null;
 }
 
 function ReplayStat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {

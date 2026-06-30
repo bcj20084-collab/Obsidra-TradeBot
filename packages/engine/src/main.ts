@@ -180,6 +180,11 @@ function describeSkippedSignal(reason: string, details: Record<string, unknown>)
   if (typeof details.requiredAdx === "number") parts.push(`Need ADX: ${formatMaybeNumber(details.requiredAdx, 1)}`);
   if (typeof details.adx === "number") parts.push(`ADX: ${formatMaybeNumber(details.adx, 1)}`);
   if (typeof details.rsi === "number") parts.push(`RSI: ${formatMaybeNumber(details.rsi, 1)}`);
+  if (typeof details.volumeRatio === "number") parts.push(`Vol: ${formatMaybeNumber(details.volumeRatio, 2)}x`);
+  if (typeof details.choppiness === "number") parts.push(`Chop: ${formatMaybeNumber(details.choppiness, 1)}`);
+  if (typeof details.momentumSpikePct === "number") parts.push(`Spike: ${formatMaybeNumber(details.momentumSpikePct, 2)}%`);
+  if (typeof details.h1Trend === "string") parts.push(`H1: ${details.h1Trend}${details.h1Conflict ? " conflict" : ""}`);
+  if (typeof details.btcTrend === "string" && details.btcTrend !== "NEUTRAL") parts.push(`BTC: ${details.btcTrend}${details.btcConflict ? " conflict" : ""}`);
   if (typeof details.baseScore === "number") parts.push(`Base: ${formatMaybeNumber(details.baseScore, 0)}`);
   if (details.rangingOverride === true) parts.push("Paper idle override: ON");
   return parts.join(" | ");

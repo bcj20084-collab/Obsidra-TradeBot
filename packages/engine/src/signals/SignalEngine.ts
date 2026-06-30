@@ -14,6 +14,9 @@ export type SignalEvaluationReason =
   | "INDICATORS_NOT_READY"
   | "VOLATILITY_TOO_HIGH"
   | "FUNDING_FILTER"
+  | "MOMENTUM_SPIKE"
+  | "HTF_CONFLICT"
+  | "BTC_FILTER"
   | "SCORE_BELOW_THRESHOLD"
   | "RANGING_MARKET";
 
@@ -33,6 +36,50 @@ function latestValidClose(candles: Array<{ close: number }>): number | undefined
     if (candle && isFinitePositive(candle.close)) return candle.close;
   }
   return undefined;
+}
+
+function percentageChange(from: number, to: number): number {
+  return from > 0 ? ((to - from) / from) * 100 : 0;
+}
+
+function volumeRatio(candles: Array<{ volume: number }>): number {
+  const latest = candles.at(-1)?.volume ?? 0;
+  const base = candles.slice(-21, -1);
+  const average = base.length ? base.reduce((sum, candle) => sum + candle.volume, 0) / base.length : 0;
+  return average > 0 ? latest / average : 1;
+}
+
+function choppinessIndex(candles: Array<{ high: number; low: number; close: number }>, period = 14): number | null {
+  if (candles.length < period + 1) return null;
+  const slice = candles.slice(-(period + 1));
+  let trueRangeSum = 0;
+  let highestHigh = Number.NEGATIVE_INFINITY;
+  let lowestLow = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < slice.length; index += 1) {
+    const current = slice[index]!;
+    const previous = slice[index - 1]!;
+    trueRangeSum += Math.max(
+      current.high - current.low,
+      Math.abs(current.high - previous.close),
+      Math.abs(current.low - previous.close),
+    );
+    highestHigh = Math.max(highestHigh, current.high);
+    lowestLow = Math.min(lowestLow, current.low);
+  }
+  const range = highestHigh - lowestLow;
+  if (trueRangeSum <= 0 || range <= 0) return null;
+  return 100 * (Math.log10(trueRangeSum / range) / Math.log10(period));
+}
+
+function emaTrend(candles: Array<{ close: number }>, fast = 21, slow = 55): "LONG" | "SHORT" | "NEUTRAL" {
+  if (candles.length < slow + 5) return "NEUTRAL";
+  const closes = candles.map((candle) => candle.close);
+  const fastValue = ema(closes, fast).at(-1);
+  const slowValue = ema(closes, slow).at(-1);
+  if (!Number.isFinite(fastValue) || !Number.isFinite(slowValue)) return "NEUTRAL";
+  if (fastValue! > slowValue!) return "LONG";
+  if (fastValue! < slowValue!) return "SHORT";
+  return "NEUTRAL";
 }
 
 type IdleRelaxation = {
@@ -108,6 +155,8 @@ export class SignalEngine {
       };
     }
     const closes = m15.map((c) => c.close);
+    const h1 = this.store.getCandles(symbol, "60");
+    const btcH1 = symbol === "BTCUSDT" ? [] : this.store.getCandles("BTCUSDT", "60");
     const rsiValue = rsi(closes).at(-1) ?? 50;
     const macdPoints = macd(closes);
     const macdNow = macdPoints.at(-1);
@@ -136,6 +185,17 @@ export class SignalEngine {
         details: { direction, price, priceSource, atr: atrValue, atrPct: (atrValue / price) * 100, maximumAtrPct: 3 },
       };
     }
+    const lastClose = closes.at(-1) ?? price;
+    const closeThreeBack = closes.at(-4) ?? lastClose;
+    const momentumSpikePct = Math.abs(percentageChange(closeThreeBack, lastClose));
+    const spikeLimitPct = idle.scoreRelaxation > 0 ? 4.5 : 3.2;
+    if (momentumSpikePct > spikeLimitPct) {
+      return {
+        signal: null,
+        reason: "MOMENTUM_SPIKE",
+        details: { direction, price, priceSource, momentumSpikePct, maximumSpikePct: spikeLimitPct, idleHours: idle.idleHours },
+      };
+    }
     let baseScore = 30;
     const crossover = direction === "LONG"
       ? macdPrevious.macd <= macdPrevious.signal && macdNow.macd > macdNow.signal
@@ -158,6 +218,33 @@ export class SignalEngine {
     const notChasing = direction === "LONG" ? price < bb.upper - bandDistance : price > bb.lower + bandDistance;
     if (nearEntryBand) baseScore += 18;
     else if (notChasing) baseScore += 10;
+    const currentVolumeRatio = volumeRatio(m15);
+    const chop = choppinessIndex(m15);
+    const h1Trend = emaTrend(h1);
+    const h1Adx = h1.length >= 60 ? adx(h1).at(-1) ?? 0 : 0;
+    const h1Conflict = h1Trend !== "NEUTRAL" && h1Trend !== direction && h1Adx >= 22;
+    if (h1Trend === direction) baseScore += h1Adx >= 28 ? 12 : 8;
+    else if (h1Conflict) baseScore -= h1Adx >= 30 ? 14 : 8;
+    if (currentVolumeRatio >= 1.5) baseScore += 10;
+    else if (currentVolumeRatio >= 0.8) baseScore += 4;
+    else if (currentVolumeRatio < 0.45) baseScore -= 10;
+    if (chop !== null) {
+      if (chop < 38.2) baseScore += 6;
+      else if (chop > 61.8) baseScore -= 10;
+    }
+    let btcTrend = "NEUTRAL";
+    let btcAdx = 0;
+    let btcRsi = 50;
+    let btcConflict = false;
+    if (btcH1.length >= 80) {
+      btcTrend = emaTrend(btcH1);
+      btcAdx = adx(btcH1).at(-1) ?? 0;
+      btcRsi = rsi(btcH1.map((candle) => candle.close)).at(-1) ?? 50;
+      btcConflict = (direction === "LONG" && btcTrend === "SHORT" && btcAdx >= 28 && btcRsi < 45)
+        || (direction === "SHORT" && btcTrend === "LONG" && btcAdx >= 28 && btcRsi > 55);
+      if (btcTrend === direction && btcAdx >= 24) baseScore += 8;
+      else if (btcConflict) baseScore -= btcAdx >= 35 ? 14 : 9;
+    }
     const fundingRate = ticker?.fundingRate ?? 0;
     if (direction === "LONG" && fundingRate > 0.0005) {
       return {
@@ -186,11 +273,20 @@ export class SignalEngine {
     const recentLossSum = Math.abs(recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) < 0)
       .reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0));
     const recentProfitFactor = recentLossSum > 0 ? Math.min(3, recentWinSum / recentLossSum) : 1;
+    const recentLossStreakIndex = recentTrades.findIndex((trade) => (trade.pnlUsdt ?? 0) > 0);
+    const recentLossStreak = recentLossStreakIndex === -1 ? recentTrades.length : recentLossStreakIndex;
+    let symbolLearningAdjustment = 0;
+    if (recentTrades.length >= 4) {
+      if (recentWinRate >= 0.6 && recentProfitFactor >= 1.2) symbolLearningAdjustment += 5;
+      if (recentWinRate <= 0.35) symbolLearningAdjustment -= 6;
+      if (recentLossStreak >= 2) symbolLearningAdjustment -= Math.min(12, recentLossStreak * 4);
+      baseScore += symbolLearningAdjustment;
+    }
     const features: MlFeatures = {
       rsi14Norm: rsiValue / 100,
       macdHistogramNorm: macdAtr,
       bbPosition: (price - bb.lower) / Math.max(bb.upper - bb.lower, Number.EPSILON),
-      volumeRatio: m15.at(-1)!.volume / Math.max(avgVolume, Number.EPSILON),
+      volumeRatio: currentVolumeRatio,
       trendStrength: adxValue / 100,
       priceVsEma21,
       priceVsEma55,
@@ -240,6 +336,16 @@ export class SignalEngine {
       mlAdjustment,
       regime,
       rangingOverride: idle.rangingOverride,
+      h1Trend,
+      h1Adx,
+      h1Conflict,
+      btcTrend,
+      btcAdx,
+      btcRsi,
+      btcConflict,
+      volumeRatio: currentVolumeRatio,
+      choppiness: chop,
+      momentumSpikePct,
       rsi: rsiValue,
       adx: adxValue,
       atr: atrValue,
@@ -250,7 +356,15 @@ export class SignalEngine {
       nearEntryBand,
       recentWinRate,
       recentProfitFactor,
+      recentLossStreak,
+      symbolLearningAdjustment,
     };
+    if (h1Conflict && !idle.rangingOverride && score < idle.minSignalScore + 8) {
+      return { signal: null, reason: "HTF_CONFLICT", details: evaluationDetails };
+    }
+    if (btcConflict && !idle.rangingOverride && score < idle.minSignalScore + 8) {
+      return { signal: null, reason: "BTC_FILTER", details: evaluationDetails };
+    }
     if (score < idle.minSignalScore) {
       return { signal: null, reason: "SCORE_BELOW_THRESHOLD", details: evaluationDetails };
     }
