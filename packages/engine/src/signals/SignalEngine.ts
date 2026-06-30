@@ -1,4 +1,4 @@
-import { prisma, type SignalResult } from "@obsidra/shared";
+import { getEnv, prisma, type SignalResult } from "@obsidra/shared";
 import { adx, atr, bollingerBands, ema, macd, rsi } from "../indicators/index.js";
 import type { MarketDataStore } from "../data/MarketDataStore.js";
 import type { CircuitBreaker } from "./CircuitBreaker.js";
@@ -34,6 +34,14 @@ function latestValidClose(candles: Array<{ close: number }>): number | undefined
   }
   return undefined;
 }
+
+type IdleRelaxation = {
+  idleHours: number | null;
+  scoreRelaxation: number;
+  minSignalScore: number;
+  requiredAdx: number;
+  rangingOverride: boolean;
+};
 
 export class SignalEngine {
   constructor(
@@ -78,16 +86,18 @@ export class SignalEngine {
       };
     }
     const priceSource = isFinitePositive(ticker?.price) ? "ticker" : "last_15m_candle";
-    const direction = price > ema21 && ema21 > ema55 && adxValue > 25
+    const { config, regime } = this.adaptive.snapshot;
+    const idle = await this.idleRelaxation(symbol, config.minSignalScore, adxValue, regime);
+    const direction = price > ema21 && ema21 > ema55 && adxValue >= idle.requiredAdx
       ? "LONG"
-      : price < ema21 && ema21 < ema55 && adxValue > 25
+      : price < ema21 && ema21 < ema55 && adxValue >= idle.requiredAdx
         ? "SHORT"
         : null;
     if (!direction) {
       return {
         signal: null,
         reason: "NO_TREND",
-        details: { price, priceSource, ema21, ema55, adx: adxValue, requiredAdx: 25 },
+        details: { price, priceSource, ema21, ema55, adx: adxValue, requiredAdx: idle.requiredAdx, idleHours: idle.idleHours, scoreRelaxation: idle.scoreRelaxation },
       };
     }
     if (this.circuitBreaker.state.active) {
@@ -216,16 +226,20 @@ export class SignalEngine {
     });
     const mlAdjustment = this.ml.score(features);
     const score = Math.max(0, Math.min(100, baseScore + mlAdjustment));
-    const { config, regime } = this.adaptive.snapshot;
     const evaluationDetails = {
       direction,
       price,
       priceSource,
       score: Math.round(score),
-      minimumScore: config.minSignalScore,
+      minimumScore: idle.minSignalScore,
+      baseMinimumScore: config.minSignalScore,
+      scoreRelaxation: idle.scoreRelaxation,
+      idleHours: idle.idleHours,
+      requiredAdx: idle.requiredAdx,
       baseScore: Math.round(baseScore),
       mlAdjustment,
       regime,
+      rangingOverride: idle.rangingOverride,
       rsi: rsiValue,
       adx: adxValue,
       atr: atrValue,
@@ -237,10 +251,10 @@ export class SignalEngine {
       recentWinRate,
       recentProfitFactor,
     };
-    if (score < config.minSignalScore) {
+    if (score < idle.minSignalScore) {
       return { signal: null, reason: "SCORE_BELOW_THRESHOLD", details: evaluationDetails };
     }
-    if (regime === "RANGING") {
+    if (regime === "RANGING" && !idle.rangingOverride) {
       return { signal: null, reason: "RANGING_MARKET", details: evaluationDetails };
     }
     const stopLoss = direction === "LONG" ? price - config.slMultiplier * atrValue : price + config.slMultiplier * atrValue;
@@ -262,5 +276,33 @@ export class SignalEngine {
       timestamp: Date.now(),
     };
     return { signal, reason: "SIGNAL_READY", details: evaluationDetails };
+  }
+
+  private async idleRelaxation(symbol: string, baseMinSignalScore: number, adxValue: number, regime: string): Promise<IdleRelaxation> {
+    const env = getEnv();
+    const relaxAfterHours = env.PAPER_TRADING ? env.PAPER_IDLE_RELAX_AFTER_HOURS : Number.POSITIVE_INFINITY;
+    let idleHours: number | null = null;
+    try {
+      const latestTrade = await prisma.trade.findFirst({
+        where: { symbol },
+        orderBy: { updatedAt: "desc" },
+        select: { updatedAt: true },
+      });
+      idleHours = latestTrade
+        ? Math.max(0, (Date.now() - latestTrade.updatedAt.getTime()) / 3_600_000)
+        : env.PAPER_TRADING ? 48 : null;
+    } catch {
+      idleHours = null;
+    }
+    const idleRatio = idleHours === null ? 0 : Math.max(0, Math.min(1, (idleHours - relaxAfterHours) / Math.max(1, 48 - relaxAfterHours)));
+    const scoreRelaxation = Math.round(idleRatio * env.PAPER_IDLE_MAX_RELAX_SCORE);
+    const minSignalScore = Math.max(55, baseMinSignalScore - scoreRelaxation);
+    const requiredAdx = Math.max(env.PAPER_IDLE_MIN_ADX, 25 - Math.round(idleRatio * (25 - env.PAPER_IDLE_MIN_ADX)));
+    const rangingOverride = env.PAPER_TRADING
+      && regime === "RANGING"
+      && idleRatio >= 1
+      && adxValue >= env.PAPER_IDLE_MIN_ADX
+      && minSignalScore <= baseMinSignalScore;
+    return { idleHours, scoreRelaxation, minSignalScore, requiredAdx, rangingOverride };
   }
 }

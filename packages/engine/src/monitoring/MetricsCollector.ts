@@ -26,8 +26,8 @@ export class MetricsCollector {
       maxDrawdown = Math.max(maxDrawdown, ((peak - equity) / peak) * 100);
     }
     const since = new Date(Date.now() - 86_400_000);
-    const generated = await prisma.journalEntry.count({ where: { type: "SIGNAL_GENERATED", createdAt: { gte: since } } });
-    const rejected = await prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since } } });
+    const generated = await prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since } } });
+    const rejected = await prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since } } });
     const daily = await prisma.dailyMetrics.findMany({ orderBy: { date: "asc" }, take: 30 });
     const openTrades = await prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
     const symbolNames = [...new Set(trades.map((trade) => trade.symbol))];

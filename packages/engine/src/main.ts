@@ -90,6 +90,7 @@ let status: BotStatus = "RUNNING";
 const processing = new Set<string>();
 const closeWatchers = new Set<string>();
 const paperProtectionProcessing = new Set<string>();
+let lastStatusBlockAt = 0;
 const PAPER_PROTECTION_INTERVAL_MS = 15_000;
 const PAPER_TIMEOUT_MS = 6 * 60 * 60_000;
 const PAPER_TRAILING_STOP_PCT = 1.5;
@@ -153,9 +154,15 @@ function describeSkippedSignal(reason: string, details: Record<string, unknown>)
     `Price: ${formatMaybeNumber(details.price, 4)}${details.priceSource ? ` (${String(details.priceSource)})` : ""}`,
   ];
   if (typeof details.score === "number") parts.push(`Score: ${formatMaybeNumber(details.score, 0)}/${formatMaybeNumber(details.minimumScore, 0)}`);
+  if (typeof details.baseMinimumScore === "number" && details.baseMinimumScore !== details.minimumScore) {
+    parts.push(`Base min: ${formatMaybeNumber(details.baseMinimumScore, 0)}`);
+  }
+  if (typeof details.idleHours === "number") parts.push(`Idle: ${formatMaybeNumber(details.idleHours, 1)}h`);
+  if (typeof details.requiredAdx === "number") parts.push(`Need ADX: ${formatMaybeNumber(details.requiredAdx, 1)}`);
   if (typeof details.adx === "number") parts.push(`ADX: ${formatMaybeNumber(details.adx, 1)}`);
   if (typeof details.rsi === "number") parts.push(`RSI: ${formatMaybeNumber(details.rsi, 1)}`);
   if (typeof details.baseScore === "number") parts.push(`Base: ${formatMaybeNumber(details.baseScore, 0)}`);
+  if (details.rangingOverride === true) parts.push("Paper idle override: ON");
   return parts.join(" | ");
 }
 
@@ -287,7 +294,10 @@ async function bootstrap(): Promise<void> {
   setInterval(() => void flushHistoricalCandleQueue(), HISTORICAL_CANDLE_FLUSH_INTERVAL_MS).unref();
   void flushHistoricalCandleQueue();
   if (env.ENGINE_LOG_HEARTBEAT_SECONDS > 0) {
-    setInterval(() => void logEngineHeartbeat(), env.ENGINE_LOG_HEARTBEAT_SECONDS * 1_000).unref();
+    const heartbeatSeconds = env.NODE_ENV === "production"
+      ? Math.max(300, env.ENGINE_LOG_HEARTBEAT_SECONDS)
+      : env.ENGINE_LOG_HEARTBEAT_SECONDS;
+    setInterval(() => void logEngineHeartbeat(), heartbeatSeconds * 1_000).unref();
     void logEngineHeartbeat();
   }
   setInterval(() => void monitorPaperProtections(), PAPER_PROTECTION_INTERVAL_MS).unref();
@@ -633,6 +643,10 @@ async function logEngineHeartbeat(): Promise<void> {
       marketData,
     }, "info", `Bot heartbeat: ${status}, ${openTrades.length} open position(s)`);
     const currentMetrics = metrics.latest;
+    const now = Date.now();
+    const shouldPrintStatusBlock = openTrades.length > 0 || now - lastStatusBlockAt >= 5 * 60_000;
+    if (!shouldPrintStatusBlock) return;
+    lastStatusBlockAt = now;
     const tradeRows: Array<[string, unknown]> = openTrades.map((trade) => {
       const ticker = contexts.get(contextKey(trade.exchange as ExchangeId, trade.symbol))?.store.getTicker(trade.symbol);
       const currentPrice = ticker?.price ?? trade.entryPrice ?? 0;
@@ -652,7 +666,8 @@ async function logEngineHeartbeat(): Promise<void> {
       ["Realized PnL", `${(currentMetrics?.totalPnlUsdt ?? 0).toFixed(2)} USDT`],
       ["Win Rate", `${(currentMetrics?.winRate ?? 0).toFixed(1)}%`],
       ["Drawdown", `${(currentMetrics?.currentDrawdown ?? 0).toFixed(2)}%`],
-      ["Signals 24h", currentMetrics?.signalsGenerated24h ?? 0],
+      ["Signals ready 24h", currentMetrics?.signalsGenerated24h ?? 0],
+      ["Signals skipped 24h", currentMetrics?.signalsRejected24h ?? 0],
       ["Active Trades", openTrades.length],
       ...tradeRows,
       ["Next scan", "waiting for confirmed 15m candle"],
