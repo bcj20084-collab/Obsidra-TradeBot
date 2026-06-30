@@ -4,6 +4,7 @@ import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
 import { PremiumIntelligence } from "../components/PremiumIntelligence";
 import { SafetySupervisor } from "../components/SafetySupervisor";
+import { SignalDiagnostics } from "../components/SignalDiagnostics";
 import { SignalFeed } from "../components/SignalFeed";
 import { TopBotParity } from "../components/TopBotParity";
 import { TradeTable } from "../components/TradeTable";
@@ -66,6 +67,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
       <MetricsCards metrics={metrics} />
 
       <SafetySupervisor status={metrics.safetySupervisor} />
+
+      <SignalDiagnostics signals={signals} />
 
       <section className="grid gap-6 2xl:grid-cols-[1.4fr_.8fr]">
         <div className="glass-card">
