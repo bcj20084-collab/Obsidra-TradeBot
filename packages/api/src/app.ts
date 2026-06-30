@@ -343,7 +343,7 @@ function publicLossBrain(entry: {
     pnlPct: entry.trade?.pnlPct ?? null,
     closeReason: entry.trade?.closeReason ?? null,
     primaryCategory: stringOrNull(data.primaryCategory),
-    severity: stringOrNull(data.severity),
+    severity: stringOrNull(data.severity) ?? inferredSeverity(entry.trade?.pnlPct ?? null),
     confidence: safeNumber(data.confidence),
     summary: stringOrNull(data.summary),
     suggestedScorePenalty: safeNumber(data.suggestedScorePenalty),
@@ -351,6 +351,14 @@ function publicLossBrain(entry: {
     recommendations: Array.isArray(data.recommendations) ? data.recommendations.filter((item): item is string => typeof item === "string").slice(0, 4) : [],
     adaptiveActions: Array.isArray(data.adaptiveActions) ? data.adaptiveActions.slice(0, 4) : [],
   };
+}
+
+function inferredSeverity(pnlPct: number | null): string | null {
+  if (pnlPct === null) return null;
+  if (pnlPct <= -3) return "HIGH";
+  if (pnlPct <= -1.5) return "MEDIUM";
+  if (pnlPct < 0) return "LOW";
+  return null;
 }
 
 function safeNumber(value: unknown): number | null {
