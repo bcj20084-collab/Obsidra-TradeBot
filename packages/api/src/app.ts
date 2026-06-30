@@ -39,6 +39,42 @@ export function createApp() {
     uptimeSeconds: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
   }));
+  app.get("/health/deep", async (_request, response) => {
+    const since24h = new Date(Date.now() - 86_400_000);
+    try {
+      const [state, latestTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, dbCheck] = await Promise.all([
+        prisma.botState.findUnique({ where: { id: "singleton" } }),
+        prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
+        prisma.trade.count({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
+        prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
+        prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
+        prisma.$queryRaw`SELECT 1`,
+      ]);
+      const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
+      const lastTradeAgeHours = lastTradeAt ? (Date.now() - lastTradeAt.getTime()) / 3_600_000 : null;
+      response.json({
+        ok: true,
+        service: "obsidra-api",
+        db: Boolean(dbCheck),
+        botStatus: state?.status ?? "UNKNOWN",
+        botReason: state?.reason ?? null,
+        uptimeSeconds: Math.round(process.uptime()),
+        openPositionsCount,
+        latestTrade,
+        lastTradeAgeHours,
+        signalsReady24h,
+        signalsSkipped24h,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      response.status(503).json({
+        ok: false,
+        service: "obsidra-api",
+        uptimeSeconds: Math.round(process.uptime()),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
   app.get("/ready", async (_request, response) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
