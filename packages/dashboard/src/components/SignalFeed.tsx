@@ -6,7 +6,9 @@ const meta = {
   SIGNAL_GENERATED: { icon: CheckCircle2, label: "Generated", className: "pill-success" },
   SIGNAL_SKIPPED: { icon: SkipForward, label: "Skipped", className: "" },
   RISK_REJECTED: { icon: ShieldAlert, label: "Risk", className: "pill-danger" },
+  PAPER_PARTIAL_TAKE_PROFIT: { icon: CheckCircle2, label: "Partial TP", className: "pill-success" },
   PAPER_PROTECTION_UPDATED: { icon: Wrench, label: "Protection", className: "" },
+  TRADE_LOSS_ANALYZED: { icon: ShieldAlert, label: "Loss brain", className: "pill-danger" },
 };
 
 export function SignalFeed({ items }: { items: SignalFeedItem[] }) {
@@ -51,6 +53,7 @@ export function SignalFeed({ items }: { items: SignalFeedItem[] }) {
                 <FeedMetric label="TP" value={format(item.takeProfit)} />
                 <FeedMetric label="Regime" value={item.regime || "-"} />
               </div>
+              <GateStrip details={item.details} />
             </div>
           );
         })}
@@ -62,6 +65,25 @@ export function SignalFeed({ items }: { items: SignalFeedItem[] }) {
         )}
       </div>
     </section>
+  );
+}
+
+function GateStrip({ details }: { details: Record<string, unknown> }) {
+  const gates = [
+    ["H1", `${text(details.h1Trend)}${details.h1Conflict ? " conflict" : ""}`],
+    ["BTC", `${text(details.btcTrend)}${details.btcConflict ? " conflict" : ""}`],
+    ["Volume", number(details.volumeRatio, "x", 2)],
+    ["Chop", number(details.choppiness, "", 1)],
+    ["Spike", number(details.momentumSpikePct, "%", 2)],
+    ["Idle", number(details.idleHours, "h", 1)],
+  ].filter(([, value]) => value && value !== "-");
+  if (!gates.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {gates.map(([label, value]) => (
+        <span className="pill" key={label}>{label}: {value}</span>
+      ))}
+    </div>
   );
 }
 
@@ -81,4 +103,12 @@ function format(value: number | null): string {
 
 function humanReason(reason: string): string {
   return reason.replaceAll("_", " ").toLowerCase().replace(/^\w/, (value) => value.toUpperCase());
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" && value ? value : "-";
+}
+
+function number(value: unknown, suffix: string, digits: number): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "-";
 }
