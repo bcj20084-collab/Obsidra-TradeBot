@@ -42,12 +42,18 @@ export function createApp() {
   app.get("/health/deep", async (_request, response) => {
     const since24h = new Date(Date.now() - 86_400_000);
     try {
-      const [state, latestTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, dbCheck] = await Promise.all([
+      const [state, latestTrade, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, latestSignalEvent, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.count({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
         prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
+        prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since24h } } }),
+        prisma.journalEntry.findFirst({
+          where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] } },
+          orderBy: { createdAt: "desc" },
+          select: { type: true, data: true, createdAt: true },
+        }),
         prisma.$queryRaw`SELECT 1`,
       ]);
       const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
@@ -64,6 +70,8 @@ export function createApp() {
         lastTradeAgeHours,
         signalsReady24h,
         signalsSkipped24h,
+        riskRejected24h,
+        latestSignalEvent,
         timestamp: new Date().toISOString(),
       });
     } catch {
