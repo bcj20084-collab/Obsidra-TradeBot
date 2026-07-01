@@ -144,9 +144,9 @@ export default function App() {
   if (!authenticated) return <Login onSuccess={() => setAuthenticated(true)} />;
 
   return (
-    <div className="app-shell min-h-screen xl:grid xl:grid-cols-[328px_1fr]">
-      <aside className="premium-sidebar sticky top-0 z-20 border-b border-white/10 p-4 backdrop-blur-xl xl:h-screen xl:border-b-0 xl:border-r xl:p-6">
-        <div className="flex items-center justify-between gap-3 xl:block">
+    <div className="app-shell min-h-screen xl:grid xl:h-screen xl:grid-cols-[328px_minmax(0,1fr)] xl:overflow-hidden">
+      <aside className="premium-sidebar z-20 flex min-h-screen flex-col border-b border-white/10 p-4 backdrop-blur-xl xl:sticky xl:top-0 xl:h-screen xl:border-b-0 xl:border-r xl:p-5">
+        <div className="sidebar-head flex shrink-0 items-center justify-between gap-3 xl:block">
           <div className="brand-card flex items-center gap-3">
             <LogoMark />
             <div>
@@ -160,78 +160,80 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="mt-5 flex gap-2 overflow-x-auto pb-1 xl:mt-7 xl:flex-col xl:gap-5 xl:overflow-visible xl:pb-0">
-          {navGroups.map((group) => (
-            <div className="sidebar-nav-group" key={group.title}>
-              <div className="sidebar-section-title hidden xl:block">{group.title}</div>
-              <div className="mt-2 flex gap-2 xl:flex-col">
-                {group.items.map(({ to, label, description, icon: Icon }) => (
-                  <NavLink
-                    className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
-                    end={to === "/"}
-                    key={to}
-                    to={to}
-                  >
-                    <Icon size={18} />
-                    <span className="min-w-0">
-                      <span className="block truncate">{label}</span>
-                      <span className="nav-item-desc hidden xl:block">{description}</span>
-                    </span>
-                    {navBadge(to) ? <span className="nav-badge">{navBadge(to)}</span> : null}
-                  </NavLink>
-                ))}
+        <div className="sidebar-scroll mt-5 flex min-h-0 flex-1 flex-col overflow-hidden xl:mt-6">
+          <nav className="flex shrink-0 gap-2 overflow-x-auto pb-2 xl:flex-col xl:gap-4 xl:overflow-visible xl:pb-0">
+            {navGroups.map((group) => (
+              <div className="sidebar-nav-group" key={group.title}>
+                <div className="sidebar-section-title hidden xl:block">{group.title}</div>
+                <div className="mt-2 flex gap-2 xl:flex-col">
+                  {group.items.map(({ to, label, description, icon: Icon }) => (
+                    <NavLink
+                      className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
+                      end={to === "/"}
+                      key={to}
+                      to={to}
+                    >
+                      <Icon size={18} />
+                      <span className="min-w-0">
+                        <span className="block truncate">{label}</span>
+                        <span className="nav-item-desc hidden xl:block">{description}</span>
+                      </span>
+                      {navBadge(to) ? <span className="nav-badge">{navBadge(to)}</span> : null}
+                    </NavLink>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </nav>
+            ))}
+          </nav>
 
-        <div className="mt-7 hidden space-y-4 xl:block">
-          <div className="sidebar-section-title">System stack</div>
-          <div className="sidebar-command-panel">
-            <div className="flex items-center gap-3">
-              <div className="sidebar-command-icon">
-                <Cpu size={18} />
+          <div className="sidebar-panel-stack mt-5 hidden min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 xl:block">
+            <div className="sidebar-section-title">System stack</div>
+            <div className="sidebar-command-panel">
+              <div className="flex items-center gap-3">
+                <div className="sidebar-command-icon">
+                  <Cpu size={18} />
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white">Autopilot Core</div>
+                  <div className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan/70">paper intelligence</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-black text-white">Autopilot Core</div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan/70">paper intelligence</div>
+              <div className="mt-4 space-y-2.5">
+                <FlowStep index="01" title="Scan" text="Market structure + volume" />
+                <FlowStep index="02" title="Approve" text="Risk, exposure, guardrails" />
+                <FlowStep index="03" title="Replay" text="Trade lifecycle + journal" />
               </div>
             </div>
-            <div className="mt-4 space-y-3">
-              <FlowStep index="01" title="Scan" text="Market structure + volume" />
-              <FlowStep index="02" title="Approve" text="Risk, exposure, guardrails" />
-              <FlowStep index="03" title="Replay" text="Trade lifecycle + journal" />
+            <div className="sidebar-card">
+              <div className="label">Runtime mode</div>
+              <div className="mt-3 text-lg font-bold text-white">{runtime.mode}</div>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Orders are simulated while the engine reads live/demo Binance market data.
+              </p>
             </div>
-          </div>
-          <div className="sidebar-card">
-            <div className="label">Runtime mode</div>
-            <div className="mt-3 text-lg font-bold text-white">{runtime.mode}</div>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Orders are simulated while the engine reads live/demo Binance market data.
-            </p>
-          </div>
-          <div className="sidebar-card">
-            <div className="label">Safety rails</div>
-            <div className="mt-4 space-y-3 text-sm">
-              <CheckRow text="Paper execution enabled" />
-              <CheckRow text="Risk gate active" />
-              <CheckRow text="DOGE 4H pullback guarded" />
-              <CheckRow text="Forward-test reality match" />
+            <div className="sidebar-card">
+              <div className="label">Safety rails</div>
+              <div className="mt-4 space-y-2.5 text-sm">
+                <CheckRow text="Paper execution enabled" />
+                <CheckRow text="Risk gate active" />
+                <CheckRow text="DOGE 4H pullback guarded" />
+                <CheckRow text="Forward-test reality match" />
+              </div>
             </div>
-          </div>
-          <div className="sidebar-card">
-            <div className="label">Session telemetry</div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <SideMetric label="Trades" value={String(metrics.totalTrades)} />
-              <SideMetric label="24h" value={String(metrics.tradesLast24h)} />
-              <SideMetric label="PF" value={metrics.profitFactor.toFixed(2)} />
-              <SideMetric label="WR" value={`${metrics.winRate.toFixed(0)}%`} />
+            <div className="sidebar-card">
+              <div className="label">Session telemetry</div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <SideMetric label="Trades" value={String(metrics.totalTrades)} />
+                <SideMetric label="24h" value={String(metrics.tradesLast24h)} />
+                <SideMetric label="PF" value={metrics.profitFactor.toFixed(2)} />
+                <SideMetric label="WR" value={`${metrics.winRate.toFixed(0)}%`} />
+              </div>
             </div>
           </div>
         </div>
       </aside>
 
-      <main className="dashboard-main p-4 sm:p-6 lg:p-8">
+      <main className="dashboard-main min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8 xl:h-screen xl:overflow-y-auto">
         <div className="premium-topbar mb-6 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
           <div>
             <div className="label">{page.eyebrow}</div>
