@@ -255,6 +255,24 @@ function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pul
         </div>
       </div>
 
+      <div className={`mt-4 rounded-2xl border p-4 ${forwardClass(control.forwardReport.level)}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="label">Forward-test reality match</div>
+            <div className="mt-1 text-lg font-black text-white">{control.forwardReport.realityMatch}/100</div>
+          </div>
+          <span className={`pill ${control.forwardReport.level === "MATCHING" ? "pill-success" : control.forwardReport.level === "DIVERGING" ? "pill-danger" : ""}`}>
+            {control.forwardReport.level}
+          </span>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{control.forwardReport.summary}</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <Mini label="Expected WR" value={`${control.forwardReport.expected.winRate.toFixed(1)}%`} />
+          <Mini label="Expected PF" value={control.forwardReport.expected.profitFactor.toFixed(2)} />
+          <Mini label="Sample progress" value={`${control.forwardReport.sampleProgress.toFixed(0)}%`} />
+        </div>
+      </div>
+
       <div className="mt-3 grid gap-3 md:grid-cols-1">
         <Mini label="Paper timeout source" value="Strategy-specific max hold" />
       </div>
@@ -452,6 +470,13 @@ function pullbackHealthClass(level: string, ready: boolean) {
   if (level === "WATCH") return "border-amber-400/30 bg-amber-400/10";
   if (level === "HEALTHY") return "border-emerald-400/30 bg-emerald-400/10";
   return ready ? "border-emerald-400/30 bg-emerald-400/10" : "border-cyan/15 bg-cyan/5";
+}
+
+function forwardClass(level: string) {
+  if (level === "MATCHING") return "border-emerald-400/30 bg-emerald-400/10";
+  if (level === "WATCH") return "border-amber-400/30 bg-amber-400/10";
+  if (level === "DIVERGING") return "border-rose-500/35 bg-rose-500/10";
+  return "border-cyan/15 bg-cyan/5";
 }
 
 function distancePct(current: number | null | undefined, target: number | null | undefined): string {

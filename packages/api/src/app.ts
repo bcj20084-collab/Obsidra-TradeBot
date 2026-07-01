@@ -460,6 +460,12 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   });
   const edgeScore = pullbackEdgeScore(checklist, trendPct, currentRsi, direction, performanceGuard.level);
   const nextCloseAt = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)).toISOString() : null;
+  const forwardReport = pullbackForwardReport({
+    trades: recentTrades.map((trade) => trade.pnlUsdt ?? 0),
+    winRate: recentTrades.length ? (wins.length / recentTrades.length) * 100 : null,
+    profitFactor,
+    recentPnlUsdt,
+  });
   return {
     strategyId: strategy.id,
     symbol: strategy.symbol,
@@ -500,6 +506,7 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     healthReason: performanceGuard.reason,
     autoPauseRecommended: performanceGuard.autoPauseRecommended,
     lastClosedTrade: recentTrades[0] ?? null,
+    forwardReport,
     openTrade,
   };
 }
@@ -582,6 +589,58 @@ function pullbackPerformanceGuard(
     return { level: "WATCH", reason: `Performance is soft: PF ${profitFactor == null ? "n/a" : profitFactor.toFixed(2)}, PnL ${recentPnlUsdt.toFixed(2)} USDT.`, autoPauseRecommended: false };
   }
   return { level: "HEALTHY", reason: `Performance guard OK: PF ${profitFactor == null ? "n/a" : profitFactor.toFixed(2)}, PnL ${recentPnlUsdt.toFixed(2)} USDT.`, autoPauseRecommended: false };
+}
+
+function pullbackForwardReport(input: {
+  trades: number[];
+  winRate: number | null;
+  profitFactor: number | null;
+  recentPnlUsdt: number;
+}) {
+  const expected = {
+    winRate: 49.45,
+    profitFactor: 1.34,
+    minTradesForRead: 5,
+    strongTradesForRead: 20,
+  };
+  const tradeCount = input.trades.length;
+  if (tradeCount === 0) {
+    return {
+      realityMatch: 0,
+      level: "WAITING",
+      summary: "No closed DOGE Pullback trades yet. Forward-test has not started.",
+      expected,
+      sampleProgress: 0,
+    };
+  }
+  const sampleProgress = Math.min(100, (tradeCount / expected.strongTradesForRead) * 100);
+  const winRateScore = input.winRate === null ? 0 : Math.max(0, 100 - Math.abs(input.winRate - expected.winRate) * 2);
+  const pfScore = input.profitFactor === null ? 0 : Math.max(0, 100 - Math.abs(input.profitFactor - expected.profitFactor) * 45);
+  const pnlScore = input.recentPnlUsdt >= 0 ? 100 : Math.max(0, 60 + input.recentPnlUsdt * 10);
+  const samplePenalty = tradeCount < expected.minTradesForRead ? 35 : tradeCount < expected.strongTradesForRead ? 10 : 0;
+  const realityMatch = Math.round(Math.max(0, Math.min(100, winRateScore * 0.35 + pfScore * 0.45 + pnlScore * 0.2 - samplePenalty)));
+  const level = tradeCount < expected.minTradesForRead
+    ? "LEARNING"
+    : realityMatch >= 75
+      ? "MATCHING"
+      : realityMatch >= 55
+        ? "WATCH"
+        : "DIVERGING";
+  return {
+    realityMatch,
+    level,
+    summary: forwardSummary(level, tradeCount, input.winRate, input.profitFactor, input.recentPnlUsdt),
+    expected,
+    sampleProgress,
+  };
+}
+
+function forwardSummary(level: string, tradeCount: number, winRate: number | null, profitFactor: number | null, pnl: number): string {
+  const stats = `${tradeCount} closed trades | WR ${winRate === null ? "n/a" : `${winRate.toFixed(1)}%`} | PF ${profitFactor === null ? "n/a" : profitFactor.toFixed(2)} | PnL ${pnl.toFixed(2)} USDT`;
+  if (level === "LEARNING") return `Learning sample: ${stats}. Need more trades before judging reality match.`;
+  if (level === "MATCHING") return `Forward-test is matching the backtest: ${stats}.`;
+  if (level === "WATCH") return `Forward-test is acceptable but not perfect: ${stats}. Keep paper only.`;
+  return `Forward-test is diverging from backtest: ${stats}. Do not scale this strategy.`;
 }
 
 function pullbackReason(input: {

@@ -145,6 +145,18 @@ export interface PullbackControl {
     closeReason: string | null;
     closedAt: string | null;
   } | null;
+  forwardReport: {
+    realityMatch: number;
+    level: "WAITING" | "LEARNING" | "MATCHING" | "WATCH" | "DIVERGING";
+    summary: string;
+    expected: {
+      winRate: number;
+      profitFactor: number;
+      minTradesForRead: number;
+      strongTradesForRead: number;
+    };
+    sampleProgress: number;
+  };
   openTrade: {
     id: string;
     direction: string;
