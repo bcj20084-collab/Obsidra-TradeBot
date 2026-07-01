@@ -123,6 +123,7 @@ export class PullbackStrategy extends BaseStrategy {
         atrStopMultiplier: params.atrStopMultiplier,
         atrTakeProfitMultiplier: params.atrTakeProfitMultiplier,
         maxHoldCandles: params.maxHoldCandles,
+        timeframeMinutes: timeframeMinutes(params.timeframe),
       },
       mlAdjustment: 0,
       regime: "TRENDING",
@@ -178,6 +179,12 @@ function averageTrueRange(candles: Candle[]): number {
     return Math.max(candle.high - candle.low, Math.abs(candle.high - previous.close), Math.abs(candle.low - previous.close));
   });
   return ranges.reduce((sum, value) => sum + value, 0) / ranges.length;
+}
+
+function timeframeMinutes(timeframe: string): number {
+  if (timeframe === "240") return 240;
+  if (timeframe === "60") return 60;
+  return Math.max(1, Number(timeframe));
 }
 
 function pullbackCircuitBreaker(pnls: number[]): { pause: boolean; reason: string } {

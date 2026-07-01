@@ -125,6 +125,8 @@ export interface PullbackControl {
   takeProfitPreview: number | null;
   tradesToday: number;
   maxDailyTrades: number;
+  maxHoldCandles: number;
+  maxHoldHours: number;
   recentTrades: number;
   winRate: number | null;
   profitFactor: number | null;

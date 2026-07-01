@@ -387,6 +387,7 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   const rsiShortAbove = numberParam(params.rsiShortAbove, 55);
   const atrStopMultiplier = numberParam(params.atrStopMultiplier, 1.2);
   const atrTakeProfitMultiplier = numberParam(params.atrTakeProfitMultiplier, 1.8);
+  const maxHoldCandles = numberParam(params.maxHoldCandles, 72);
   const maxDailyTrades = numberParam(params.maxDailyTrades, 4);
   const sinceDay = new Date();
   sinceDay.setUTCHours(0, 0, 0, 0);
@@ -465,6 +466,8 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
       : null,
     tradesToday,
     maxDailyTrades,
+    maxHoldCandles,
+    maxHoldHours: maxHoldCandles * intervalMs(timeframe) / 3_600_000,
     recentTrades: recentTrades.length,
     winRate: recentTrades.length ? (wins.length / recentTrades.length) * 100 : null,
     profitFactor,

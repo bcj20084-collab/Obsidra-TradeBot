@@ -1029,7 +1029,8 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
 
     const hitStop = isLong ? price <= trade.stopLoss : price >= trade.stopLoss;
     const hitTakeProfit = isLong ? price >= trade.takeProfit : price <= trade.takeProfit;
-    const timedOut = Date.now() - trade.openedAt.getTime() >= PAPER_TIMEOUT_MS;
+    const paperTimeoutMs = paperTimeoutMsForTrade(trade.signalData);
+    const timedOut = Date.now() - trade.openedAt.getTime() >= paperTimeoutMs;
     const entry = trade.entryPrice;
     const initialStop = protection.initialStopLoss ?? trade.stopLoss;
     const initialRiskDistance = Math.abs(entry - initialStop);
@@ -1145,6 +1146,22 @@ function paperProtectionState(signalData: unknown): PaperProtectionState {
   if (!signalData || typeof signalData !== "object") return {};
   const value = (signalData as Record<string, unknown>).paperProtection;
   return value && typeof value === "object" ? { ...(value as PaperProtectionState) } : {};
+}
+
+function paperTimeoutMsForTrade(signalData: unknown): number {
+  if (!signalData || typeof signalData !== "object") return PAPER_TIMEOUT_MS;
+  const indicators = (signalData as Record<string, unknown>).indicators;
+  if (!indicators || typeof indicators !== "object") return PAPER_TIMEOUT_MS;
+  const record = indicators as Record<string, unknown>;
+  const maxHoldCandles = typeof record.maxHoldCandles === "number" && Number.isFinite(record.maxHoldCandles)
+    ? record.maxHoldCandles
+    : null;
+  const timeframeMinutes = typeof record.timeframeMinutes === "number" && Number.isFinite(record.timeframeMinutes)
+    ? record.timeframeMinutes
+    : null;
+  if (!maxHoldCandles || !timeframeMinutes) return PAPER_TIMEOUT_MS;
+  const strategyTimeoutMs = maxHoldCandles * timeframeMinutes * 60_000;
+  return Math.max(PAPER_TIMEOUT_MS, Math.min(strategyTimeoutMs, 14 * 24 * 60 * 60_000));
 }
 
 function mergePaperProtectionState(signalData: unknown, protection: PaperProtectionState): Record<string, unknown> {

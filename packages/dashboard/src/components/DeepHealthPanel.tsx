@@ -223,14 +223,19 @@ function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pul
         <Mini label="SL preview" value={formatPrice(control.stopLossPreview)} />
         <Mini label="TP preview" value={formatPrice(control.takeProfitPreview)} />
         <Mini label="Trades today" value={`${control.tradesToday}/${control.maxDailyTrades}`} />
-        <Mini label="Next 4H close" value={control.nextCandleCloseAt ? formatTime(control.nextCandleCloseAt) : "—"} />
+        <Mini label="Max hold" value={`${control.maxHoldCandles} candles / ${Math.round(control.maxHoldHours)}h`} />
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-4">
         <Mini label="Recent trades" value={String(control.recentTrades)} />
         <Mini label="Winrate" value={control.winRate == null ? "—" : `${control.winRate.toFixed(1)}%`} />
         <Mini label="Profit factor" value={control.profitFactor == null ? "—" : control.profitFactor.toFixed(2)} />
+        <Mini label="Next 4H close" value={control.nextCandleCloseAt ? formatTime(control.nextCandleCloseAt) : "—"} />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         <Mini label="Recent PnL" value={`${formatSigned(control.recentPnlUsdt)} USDT`} />
+        <Mini label="Paper timeout source" value="Strategy-specific max hold" />
       </div>
 
       {control.autoPauseRecommended ? (
