@@ -598,18 +598,23 @@ async function evaluate(exchange: ExchangeId, symbol: string): Promise<void> {
     const decision = await context.risk.approve(symbol, signal);
     await journal.record(decision.approved ? "RISK_APPROVED" : "RISK_REJECTED", { signal, decision });
     if (!decision.approved) {
+      operatorLog("WARNING", `RISK BLOCKED | ${symbol}`, decision.reason ?? "Risk engine rejected signal");
       log.info({ exchange, symbol, reason: decision.reason }, "signal rejected");
       return;
     }
+    operatorLog("INFO", `RISK APPROVED | ${symbol}`, `Size ${decision.positionSizeUsdt.toFixed(2)} USDT | ${decision.leverage}x | SL $${decision.stopLossPrice.toFixed(4)} | TP $${decision.takeProfitPrice.toFixed(4)}`);
     const strategyId = trendDescriptor.id;
     const conflictDecision = coordinator.check(exchange, symbol, "TREND", signal.direction, decision.positionSizeUsdt, strategyId);
     if (!conflictDecision.approved) {
       await journal.record("RISK_REJECTED", { signal, decision: conflictDecision });
+      operatorLog("WARNING", `RISK BLOCKED | ${symbol}`, conflictDecision.reason ?? "Strategy conflict guard rejected trade");
       return;
     }
     const portfolioDecision = await portfolio.approve(exchange, symbol, decision.positionSizeUsdt);
     if (!portfolioDecision.approved) {
       await journal.record("RISK_REJECTED", { signal, decision: portfolioDecision });
+      const reason = "reason" in portfolioDecision ? portfolioDecision.reason : "Portfolio exposure guard rejected trade";
+      operatorLog("WARNING", `RISK BLOCKED | ${symbol}`, reason);
       return;
     }
     const tradeId = await orderManager.execute(symbol, signal, decision, exchange, strategyId);
@@ -1062,13 +1067,8 @@ async function protectPaperTrade(tradeId: string): Promise<void> {
         `POSITION DANGER | ${trade.symbol}`,
         `Near SL: ${protection.profitR.toFixed(2)}R | PnL ${protection.unrealizedPnlUsdt.toFixed(2)} USDT | price $${price.toFixed(4)} | SL $${trade.stopLoss.toFixed(4)}`,
       );
-      if (telegram.configured) {
-        await telegram.alert(
-          `Position close to SL: ${trade.symbol}`,
-          `${trade.direction} paper trade is at ${protection.profitR.toFixed(2)}R (${protection.unrealizedPnlUsdt.toFixed(2)} USDT). Price ${price.toFixed(4)}, SL ${trade.stopLoss.toFixed(4)}.`,
-          `paper-danger:${trade.id}`,
-        );
-      }
+      // Telegram clean mode: position danger stays in Railway/dashboard.
+      // Telegram is reserved for BOT ON, valid signals, trade WIN/LOSS and manual commands.
     }
 
     if (hitStop) {

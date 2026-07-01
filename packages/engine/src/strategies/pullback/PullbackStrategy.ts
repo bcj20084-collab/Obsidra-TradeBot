@@ -35,20 +35,6 @@ export class PullbackStrategy extends BaseStrategy {
       const signal = this.evaluate(candles, params);
       this.lastSignalCandleOpenTime = candle.openTime;
       if (!signal) return;
-      await this.dependencies.notifyAlert?.(
-        `SETUP READY | ${this.config.symbol}`,
-        [
-          `Strategy: DOGE 4H Pullback`,
-          `Direction: ${signal.direction}`,
-          `Edge score: ${signal.score}/100`,
-          `RSI: ${Number(signal.indicators.rsi ?? 0).toFixed(1)}`,
-          `Entry: $${signal.entryPrice.toFixed(6)}`,
-          `SL: $${signal.stopLoss.toFixed(6)}`,
-          `TP: $${signal.takeProfit.toFixed(6)}`,
-        ].join(" | "),
-        `pullback-setup:${this.config.symbol}:${candle.openTime}:${signal.direction}`,
-      );
-
       const day = new Date();
       day.setUTCHours(0, 0, 0, 0);
       const [dailyTrades, recentClosed] = await Promise.all([
@@ -78,12 +64,29 @@ export class PullbackStrategy extends BaseStrategy {
         return;
       }
       const risk = await riskEngine.approve(this.config.symbol, signal);
-      if (!risk.approved) return;
+      if (!risk.approved) {
+        operatorLog("WARNING", `PULLBACK RISK BLOCKED | ${this.config.symbol}`, risk.reason ?? "Risk engine rejected setup");
+        return;
+      }
       const portfolioApproval = await this.dependencies.approveOrder(this.config, signal.direction, risk.positionSizeUsdt);
       if (!portfolioApproval.approved) {
         operatorLog("WARNING", `PULLBACK BLOCKED | ${this.config.symbol}`, portfolioApproval.reason ?? "Portfolio guard rejected trade");
         return;
       }
+      await this.dependencies.notifyAlert?.(
+        `SIGNAL READY | ${this.config.symbol}`,
+        [
+          `Strategy: DOGE 4H Pullback`,
+          `Direction: ${signal.direction}`,
+          `Score: ${signal.score}/100`,
+          `RSI: ${Number(signal.indicators.rsi ?? 0).toFixed(1)}`,
+          `Entry: $${signal.entryPrice.toFixed(6)}`,
+          `SL: $${signal.stopLoss.toFixed(6)}`,
+          `TP: $${signal.takeProfit.toFixed(6)}`,
+          `Size: ${risk.positionSizeUsdt.toFixed(2)} USDT`,
+        ].join(" | "),
+        `pullback-valid-signal:${this.config.symbol}:${candle.openTime}:${signal.direction}`,
+      );
       const tradeId = await this.dependencies.orderManager.execute(this.config.symbol, signal, risk, this.config.exchange, this.config.id);
       this.dependencies.registerOpen(this.config, signal.direction, risk.positionSizeUsdt);
       void this.dependencies.watchTradeClose?.(tradeId, this.config.exchange, this.config.symbol, this.config.id);

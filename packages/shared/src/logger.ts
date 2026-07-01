@@ -189,6 +189,7 @@ function premiumSummary(context: PremiumLogContext): string {
   if (!redacted || typeof redacted !== "object") return "";
   const record = redacted as Record<string, unknown>;
   const preferred = [
+    "outcome",
     "status",
     "stage",
     "exchange",
@@ -200,10 +201,22 @@ function premiumSummary(context: PremiumLogContext): string {
     "reason",
     "mode",
     "executionMode",
+    "entryPrice",
+    "exitPrice",
+    "stopLoss",
+    "takeProfit",
+    "positionSizeUsdt",
+    "leverage",
+    "profitR",
+    "price",
+    "edgeScore",
+    "riskReward",
     "marketRegime",
     "totalPnlUsdt",
     "pnlUsdt",
+    "pnlPct",
     "winRate",
+    "profitFactor",
     "totalTrades",
     "tradesLast24h",
     "signalsGenerated24h",
@@ -241,7 +254,8 @@ function writePlainModuleLog(module: string, level: string, args: unknown[]): vo
       ? args[1]
       : "log";
   const extra = args.find((arg) => arg && typeof arg === "object");
-  const summary = errorSummary(redact(extra));
+  const redacted = redact(extra);
+  const summary = premiumSummary(redacted && typeof redacted === "object" ? redacted as PremiumLogContext : {});
   const timestamp = new Date().toISOString().replace("T", " ").replace("Z", "");
   const normalizedLevel = level === "WARN" ? "WARNING" : level;
   const line = `${timestamp} | ${normalizedLevel.padEnd(7)} | ${cleanOperatorText(module)} | ${cleanOperatorText(message)}${summary ? ` | ${summary}` : ""}`;

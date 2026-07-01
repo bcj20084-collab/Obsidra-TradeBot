@@ -191,8 +191,10 @@ export class TelegramNotifier {
   }
 
   alert(title: string, details: string, dedupeKey: string): Promise<void> {
+    const isSignal = title.toUpperCase().includes("SIGNAL READY");
+    const icon = isSignal ? ICON.buy : ICON.warning;
     return this.send(
-      `${ICON.warning} <b>${escapeTelegramHtml(title)}</b>\n${escapeTelegramHtml(details)}`,
+      `${icon} <b>${escapeTelegramHtml(title)}</b>\n${escapeTelegramHtml(details)}`,
       { dedupeKey: `alert:${dedupeKey}`, dedupeMs: 15 * 60_000 },
     );
   }
