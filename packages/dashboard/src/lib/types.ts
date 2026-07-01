@@ -121,6 +121,11 @@ export interface PullbackControl {
   emaSlow: number | null;
   rsi: number | null;
   atr: number | null;
+  atrPct: number | null;
+  trendPct: number | null;
+  edgeScore: number;
+  riskRewardPreview: number | null;
+  checklist: Array<{ name: string; passed: boolean; detail: string }>;
   stopLossPreview: number | null;
   takeProfitPreview: number | null;
   tradesToday: number;
@@ -134,6 +139,12 @@ export interface PullbackControl {
   healthLevel: "LEARNING" | "HEALTHY" | "WATCH" | "DANGER";
   healthReason: string;
   autoPauseRecommended: boolean;
+  lastClosedTrade: {
+    pnlUsdt: number | null;
+    pnlPct: number | null;
+    closeReason: string | null;
+    closedAt: string | null;
+  } | null;
   openTrade: {
     id: string;
     direction: string;

@@ -216,25 +216,46 @@ function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pul
         <Mini label="Price" value={formatPrice(control.price)} />
         <Mini label="RSI" value={control.rsi == null ? "—" : control.rsi.toFixed(1)} />
         <Mini label="EMA 21 / 89" value={control.emaFast == null || control.emaSlow == null ? "—" : `${control.emaFast.toFixed(5)} / ${control.emaSlow.toFixed(5)}`} />
-        <Mini label="ATR" value={control.atr == null ? "—" : control.atr.toFixed(5)} />
+        <Mini label="Edge score" value={`${control.edgeScore}/100`} />
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Mini label="ATR" value={control.atr == null ? "—" : `${control.atr.toFixed(5)} (${control.atrPct?.toFixed(2) ?? "0.00"}%)`} />
+        <Mini label="Trend strength" value={control.trendPct == null ? "—" : `${control.trendPct.toFixed(2)}%`} />
         <Mini label="SL preview" value={formatPrice(control.stopLossPreview)} />
         <Mini label="TP preview" value={formatPrice(control.takeProfitPreview)} />
-        <Mini label="Trades today" value={`${control.tradesToday}/${control.maxDailyTrades}`} />
-        <Mini label="Max hold" value={`${control.maxHoldCandles} candles / ${Math.round(control.maxHoldHours)}h`} />
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Mini label="Trades today" value={`${control.tradesToday}/${control.maxDailyTrades}`} />
+        <Mini label="Max hold" value={`${control.maxHoldCandles} candles / ${Math.round(control.maxHoldHours)}h`} />
         <Mini label="Recent trades" value={String(control.recentTrades)} />
         <Mini label="Winrate" value={control.winRate == null ? "—" : `${control.winRate.toFixed(1)}%`} />
-        <Mini label="Profit factor" value={control.profitFactor == null ? "—" : control.profitFactor.toFixed(2)} />
-        <Mini label="Next 4H close" value={control.nextCandleCloseAt ? formatTime(control.nextCandleCloseAt) : "—"} />
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Mini label="Profit factor" value={control.profitFactor == null ? "—" : control.profitFactor.toFixed(2)} />
+        <Mini label="Next 4H close" value={control.nextCandleCloseAt ? formatTime(control.nextCandleCloseAt) : "—"} />
         <Mini label="Recent PnL" value={`${formatSigned(control.recentPnlUsdt)} USDT`} />
+        <Mini label="Last close" value={control.lastClosedTrade?.closeReason ?? "—"} />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="label">Pre-trade checklist</div>
+          <span className="pill">{control.checklist.filter((item) => item.passed).length}/{control.checklist.length} passed</span>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          {control.checklist.map((item) => (
+            <div key={item.name} className={`rounded-2xl border p-3 text-xs ${item.passed ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-black/20 text-slate-400"}`}>
+              <div className="font-black text-white">{item.passed ? "✓" : "•"} {item.name}</div>
+              <div className="mt-1 leading-5">{item.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-1">
         <Mini label="Paper timeout source" value="Strategy-specific max hold" />
       </div>
 

@@ -417,6 +417,8 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   const slow = closes.length >= slowPeriod ? ema(closes, slowPeriod).at(-1) ?? null : null;
   const currentRsi = closes.length >= 15 ? rsi(closes.slice(-15)) : null;
   const currentAtr = candles.length >= 15 ? averageTrueRange(candles.slice(-15)) : null;
+  const atrPct = latest && currentAtr ? (currentAtr / latest.close) * 100 : null;
+  const trendPct = latest && fast !== null && slow !== null ? (Math.abs(fast - slow) / latest.close) * 100 : null;
   const longReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast > slow && currentRsi <= rsiLongBelow && latest.close > slow);
   const shortReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast < slow && currentRsi >= rsiShortAbove && latest.close < slow);
   const direction = longReady ? "LONG" : shortReady ? "SHORT" : "WAITING";
@@ -440,6 +442,23 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   const recentPnlUsdt = recentTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
   const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 10 : null;
   const performanceGuard = pullbackPerformanceGuard(recentTrades.map((trade) => trade.pnlUsdt ?? 0), profitFactor, recentPnlUsdt);
+  const riskRewardPreview = atrStopMultiplier > 0 ? atrTakeProfitMultiplier / atrStopMultiplier : null;
+  const checklist = pullbackChecklist({
+    candleCount: candles.length,
+    openTrade: Boolean(openTrade),
+    tradesToday,
+    maxDailyTrades,
+    fast,
+    slow,
+    rsi: currentRsi,
+    rsiLongBelow,
+    rsiShortAbove,
+    price: latest?.close ?? null,
+    atrPct,
+    riskRewardPreview,
+    healthLevel: performanceGuard.level,
+  });
+  const edgeScore = pullbackEdgeScore(checklist, trendPct, currentRsi, direction, performanceGuard.level);
   const nextCloseAt = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)).toISOString() : null;
   return {
     strategyId: strategy.id,
@@ -458,6 +477,11 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     emaSlow: slow,
     rsi: currentRsi,
     atr: currentAtr,
+    atrPct,
+    trendPct,
+    edgeScore,
+    checklist,
+    riskRewardPreview,
     stopLossPreview: latest && currentAtr && direction !== "WAITING"
       ? direction === "LONG" ? latest.close - currentAtr * atrStopMultiplier : latest.close + currentAtr * atrStopMultiplier
       : null,
@@ -475,8 +499,66 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     healthLevel: performanceGuard.level,
     healthReason: performanceGuard.reason,
     autoPauseRecommended: performanceGuard.autoPauseRecommended,
+    lastClosedTrade: recentTrades[0] ?? null,
     openTrade,
   };
+}
+
+function pullbackChecklist(input: {
+  candleCount: number;
+  openTrade: boolean;
+  tradesToday: number;
+  maxDailyTrades: number;
+  fast: number | null;
+  slow: number | null;
+  rsi: number | null;
+  rsiLongBelow: number;
+  rsiShortAbove: number;
+  price: number | null;
+  atrPct: number | null;
+  riskRewardPreview: number | null;
+  healthLevel: string;
+}) {
+  const bullish = input.fast !== null && input.slow !== null && input.fast > input.slow;
+  const bearish = input.fast !== null && input.slow !== null && input.fast < input.slow;
+  const trendAligned = Boolean(bullish || bearish);
+  const rsiPullback = Boolean(
+    input.rsi !== null && (
+      (bullish && input.rsi <= input.rsiLongBelow)
+      || (bearish && input.rsi >= input.rsiShortAbove)
+    ),
+  );
+  const priceAligned = Boolean(
+    input.price !== null && input.slow !== null && (
+      (bullish && input.price > input.slow)
+      || (bearish && input.price < input.slow)
+    ),
+  );
+  return [
+    { name: "Data ready", passed: input.candleCount >= 120, detail: `${input.candleCount}/120 DOGE 4H candles` },
+    { name: "No active pullback trade", passed: !input.openTrade, detail: input.openTrade ? "Trade already open" : "Ready for next setup" },
+    { name: "Daily cap available", passed: input.tradesToday < input.maxDailyTrades, detail: `${input.tradesToday}/${input.maxDailyTrades} trades today` },
+    { name: "EMA trend aligned", passed: trendAligned, detail: bullish ? "Bullish EMA trend" : bearish ? "Bearish EMA trend" : "Flat EMA trend" },
+    { name: "RSI pullback zone", passed: rsiPullback, detail: input.rsi === null ? "RSI unavailable" : `RSI ${input.rsi.toFixed(1)}` },
+    { name: "Price on correct side", passed: priceAligned, detail: input.price === null || input.slow === null ? "Price/EMA unavailable" : `Price ${input.price.toFixed(5)} vs EMA slow ${input.slow.toFixed(5)}` },
+    { name: "Volatility acceptable", passed: input.atrPct !== null && input.atrPct > 0 && input.atrPct <= 8, detail: input.atrPct === null ? "ATR unavailable" : `ATR ${input.atrPct.toFixed(2)}%` },
+    { name: "Risk/reward valid", passed: (input.riskRewardPreview ?? 0) >= 1.5, detail: input.riskRewardPreview === null ? "RR unavailable" : `RR ${input.riskRewardPreview.toFixed(2)}` },
+    { name: "Performance guard", passed: input.healthLevel !== "DANGER", detail: input.healthLevel },
+  ];
+}
+
+function pullbackEdgeScore(
+  checklist: Array<{ passed: boolean }>,
+  trendPct: number | null,
+  rsiValue: number | null,
+  direction: string,
+  healthLevel: string,
+): number {
+  const passedScore = (checklist.filter((item) => item.passed).length / Math.max(1, checklist.length)) * 70;
+  const trendScore = Math.min(15, (trendPct ?? 0) * 6);
+  const rsiScore = direction === "WAITING" || rsiValue === null ? 0 : Math.min(10, Math.abs(rsiValue - 50) * 0.35);
+  const healthScore = healthLevel === "HEALTHY" ? 5 : healthLevel === "LEARNING" ? 2 : healthLevel === "WATCH" ? -3 : -15;
+  return Math.round(Math.max(0, Math.min(100, passedScore + trendScore + rsiScore + healthScore)));
 }
 
 function pullbackPerformanceGuard(
