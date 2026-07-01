@@ -119,6 +119,16 @@ export default function App() {
     return { status, healthy, mode };
   }, [metrics.botStatus]);
   const page = routeMeta[(location.pathname as keyof typeof routeMeta)] ?? routeMeta["/"];
+  const openTradeCount = trades.filter((trade) => ["OPEN", "FILLED", "CLOSING"].includes(trade.status)).length;
+  const navBadge = (to: string): string | null => {
+    if (to === "/") return metrics.botStatus === "RUNNING" ? "LIVE" : metrics.botStatus;
+    if (to === "/trades") return openTradeCount ? String(openTradeCount) : String(metrics.tradesLast24h);
+    if (to === "/strategy") return signals.length ? String(signals.length) : null;
+    if (to === "/strategies") return "OS";
+    if (to === "/backtest") return "LAB";
+    if (to === "/settings") return connectionError ? "!" : null;
+    return null;
+  };
 
   if (authenticated === null) {
     return (
@@ -167,6 +177,7 @@ export default function App() {
                       <span className="block truncate">{label}</span>
                       <span className="nav-item-desc hidden xl:block">{description}</span>
                     </span>
+                    {navBadge(to) ? <span className="nav-badge">{navBadge(to)}</span> : null}
                   </NavLink>
                 ))}
               </div>

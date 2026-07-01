@@ -4,6 +4,7 @@ import type { Metrics, ReplayCandle, SignalFeedItem, Trade, TradeDetail } from "
 import { DeepHealthPanel } from "../components/DeepHealthPanel";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
+import { ObsidraCommandCenter } from "../components/ObsidraCommandCenter";
 import { PremiumIntelligence } from "../components/PremiumIntelligence";
 import { SafetySupervisor } from "../components/SafetySupervisor";
 import { SignalDiagnostics } from "../components/SignalDiagnostics";
@@ -44,6 +45,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
 
   return (
     <div className="space-y-6">
+      <ObsidraCommandCenter metrics={metrics} trades={trades} signals={signals} />
+
       <section className="hero-grid">
         <div className="glass-card hero-card">
           <div className="premium-hero-noise" />
