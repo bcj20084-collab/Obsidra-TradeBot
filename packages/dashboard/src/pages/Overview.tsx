@@ -9,6 +9,7 @@ import { SafetySupervisor } from "../components/SafetySupervisor";
 import { SignalDiagnostics } from "../components/SignalDiagnostics";
 import { SignalFeed } from "../components/SignalFeed";
 import { StrategyOptimizerCenter } from "../components/StrategyOptimizerCenter";
+import { SystemDeployCenter } from "../components/SystemDeployCenter";
 import { TopBotParity } from "../components/TopBotParity";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
@@ -134,6 +135,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
           </div>
         </div>
       </section>
+
+      <SystemDeployCenter />
 
       <DeepHealthPanel />
 

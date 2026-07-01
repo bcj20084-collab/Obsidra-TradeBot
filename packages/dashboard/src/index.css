@@ -408,6 +408,53 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
       rgba(255,255,255,.04);
   }
 
+  .system-deploy-center {
+    @apply overflow-hidden;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(80,227,194,.15), transparent 25rem),
+      radial-gradient(circle at 92% 5%, rgba(124,92,255,.14), transparent 24rem),
+      radial-gradient(circle at 45% 110%, rgba(251,191,36,.07), transparent 20rem),
+      linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.018)),
+      rgba(255,255,255,.04);
+  }
+
+  .system-status-orb {
+    @apply inline-flex min-w-[230px] items-center gap-4 rounded-[1.8rem] border border-white/10 bg-black/30 p-4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 42px rgba(80,227,194,.07);
+  }
+
+  .system-status-orb > span {
+    @apply h-4 w-4 shrink-0 rounded-full bg-amber-300;
+    box-shadow: 0 0 0 8px rgba(251,191,36,.08), 0 0 26px rgba(251,191,36,.75);
+  }
+
+  .system-status-orb > span.is-live {
+    @apply bg-emerald-400;
+    box-shadow: 0 0 0 8px rgba(52,211,153,.08), 0 0 26px rgba(52,211,153,.9);
+  }
+
+  .system-status-orb > span.is-warn {
+    @apply bg-amber-300;
+  }
+
+  .deploy-stat,
+  .deploy-console-card,
+  .deploy-flow-card {
+    @apply rounded-[1.7rem] border border-white/10 bg-black/25 p-4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+  }
+
+  .deploy-flow-card {
+    @apply transition hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-black/35;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
   .metric-tile {
     @apply rounded-3xl border border-white/10 bg-black/25 p-4;
   }

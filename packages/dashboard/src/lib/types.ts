@@ -34,6 +34,20 @@ export interface DeepHealth {
   ok: boolean;
   service: string;
   db: boolean;
+  deploy?: {
+    nodeEnv: string;
+    railwayEnvironmentName: string | null;
+    railwayServiceName: string | null;
+    railwayReplicaRegion: string | null;
+    railwayPublicDomain: string | null;
+    railwayStaticUrl: string | null;
+    deploymentId: string | null;
+    projectId: string | null;
+    serviceId: string | null;
+    commitSha: string | null;
+    commitBranch: string | null;
+    startedAt: string;
+  };
   botStatus: string;
   botReason: string | null;
   activeStrategies?: Array<{

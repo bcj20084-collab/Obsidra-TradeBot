@@ -171,6 +171,7 @@ export function createApp() {
         ok: true,
         service: "obsidra-api",
         db: Boolean(dbCheck),
+        deploy: publicDeployInfo(),
         botStatus: state?.status ?? "UNKNOWN",
         botReason: state?.reason ?? null,
         activeStrategies,
@@ -213,6 +214,8 @@ export function createApp() {
       response.status(503).json({
         ok: false,
         service: "obsidra-api",
+        db: false,
+        deploy: publicDeployInfo(),
         uptimeSeconds: Math.round(process.uptime()),
         timestamp: new Date().toISOString(),
       });
@@ -261,6 +264,29 @@ export function createApp() {
     response.sendFile(path.join(dashboardDist, "index.html"));
   });
   return app;
+}
+
+function publicDeployInfo() {
+  return {
+    nodeEnv: process.env.NODE_ENV ?? "unknown",
+    railwayEnvironmentName: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
+    railwayServiceName: process.env.RAILWAY_SERVICE_NAME ?? null,
+    railwayReplicaRegion: process.env.RAILWAY_REPLICA_REGION ?? null,
+    railwayPublicDomain: process.env.RAILWAY_PUBLIC_DOMAIN ?? null,
+    railwayStaticUrl: process.env.RAILWAY_STATIC_URL ?? null,
+    deploymentId: maskId(process.env.RAILWAY_DEPLOYMENT_ID),
+    projectId: maskId(process.env.RAILWAY_PROJECT_ID),
+    serviceId: maskId(process.env.RAILWAY_SERVICE_ID),
+    commitSha: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
+    commitBranch: process.env.RAILWAY_GIT_BRANCH ?? process.env.GIT_BRANCH ?? null,
+    startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+  };
+}
+
+function maskId(value?: string): string | null {
+  if (!value) return null;
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
