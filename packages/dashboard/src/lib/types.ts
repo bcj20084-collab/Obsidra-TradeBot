@@ -44,6 +44,7 @@ export interface DeepHealth {
     mode: string;
     params: Record<string, unknown>;
   }>;
+  pullbackControl?: PullbackControl | null;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
@@ -101,6 +102,42 @@ export interface AutoTunerItem {
   mode: string;
   recommendation: string;
   updatedAt: string;
+}
+
+export interface PullbackControl {
+  strategyId: string;
+  symbol: string;
+  exchange: string;
+  mode: string;
+  timeframe: string;
+  status: string;
+  direction: string;
+  reason: string;
+  candleCount: number;
+  latestCandleAt: string | null;
+  nextCandleCloseAt: string | null;
+  price: number | null;
+  emaFast: number | null;
+  emaSlow: number | null;
+  rsi: number | null;
+  atr: number | null;
+  stopLossPreview: number | null;
+  takeProfitPreview: number | null;
+  tradesToday: number;
+  maxDailyTrades: number;
+  recentTrades: number;
+  winRate: number | null;
+  profitFactor: number | null;
+  recentPnlUsdt: number;
+  openTrade: {
+    id: string;
+    direction: string;
+    entryPrice: number | null;
+    stopLoss: number;
+    takeProfit: number;
+    openedAt: string | null;
+    signalScore: number;
+  } | null;
 }
 
 export interface DeepOpenTrade {

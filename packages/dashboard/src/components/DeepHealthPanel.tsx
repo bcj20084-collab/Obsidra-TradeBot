@@ -34,6 +34,7 @@ export function DeepHealthPanel() {
   const lossBrain = health?.latestLossBrain ?? [];
   const autoTuner = health?.autoTuner ?? [];
   const activeStrategies = health?.activeStrategies ?? [];
+  const pullbackControl = health?.pullbackControl ?? null;
   const running = health?.ok && health.botStatus === "RUNNING" && health.db;
 
   return (
@@ -80,6 +81,8 @@ export function DeepHealthPanel() {
           </div>
         </div>
       ) : null}
+
+      {pullbackControl ? <PullbackControlCard control={pullbackControl} /> : null}
 
       {health?.latestSignalEvent ? (
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-300">
@@ -187,6 +190,53 @@ export function DeepHealthPanel() {
         </div>
       )}
     </section>
+  );
+}
+
+function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pullbackControl"]> }) {
+  const ready = control.status === "SETUP_READY";
+  const open = control.openTrade;
+  return (
+    <div className={`mt-4 rounded-3xl border p-5 ${ready ? "border-emerald-400/30 bg-emerald-400/10" : "border-cyan/15 bg-cyan/5"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="label">DOGE Pullback Control Center</div>
+          <div className="mt-1 text-xl font-black text-white">{control.symbol} {control.timeframe === "240" ? "4H" : `${control.timeframe}m`} / {control.exchange}</div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{control.reason}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className={ready ? "pill pill-success" : "pill"}>{control.direction}</span>
+          <span className="pill">{control.mode}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <Mini label="Price" value={formatPrice(control.price)} />
+        <Mini label="RSI" value={control.rsi == null ? "—" : control.rsi.toFixed(1)} />
+        <Mini label="EMA 21 / 89" value={control.emaFast == null || control.emaSlow == null ? "—" : `${control.emaFast.toFixed(5)} / ${control.emaSlow.toFixed(5)}`} />
+        <Mini label="ATR" value={control.atr == null ? "—" : control.atr.toFixed(5)} />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Mini label="SL preview" value={formatPrice(control.stopLossPreview)} />
+        <Mini label="TP preview" value={formatPrice(control.takeProfitPreview)} />
+        <Mini label="Trades today" value={`${control.tradesToday}/${control.maxDailyTrades}`} />
+        <Mini label="Next 4H close" value={control.nextCandleCloseAt ? formatTime(control.nextCandleCloseAt) : "—"} />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Mini label="Recent trades" value={String(control.recentTrades)} />
+        <Mini label="Winrate" value={control.winRate == null ? "—" : `${control.winRate.toFixed(1)}%`} />
+        <Mini label="Profit factor" value={control.profitFactor == null ? "—" : control.profitFactor.toFixed(2)} />
+        <Mini label="Recent PnL" value={`${formatSigned(control.recentPnlUsdt)} USDT`} />
+      </div>
+
+      {open ? (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-slate-300">
+          <span className="font-bold text-white">Open pullback trade:</span> {open.direction} entry {formatPrice(open.entryPrice)} / SL {formatPrice(open.stopLoss)} / TP {formatPrice(open.takeProfit)} / score {open.signalScore}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

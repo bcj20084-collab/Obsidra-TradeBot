@@ -166,6 +166,7 @@ export function createApp() {
       const publicLossBrain = latestLossBrain.map(publicLossBrainEntry);
       const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
       const lastTradeAgeHours = lastTradeAt ? (Date.now() - lastTradeAt.getTime()) / 3_600_000 : null;
+      const pullbackControl = await buildPullbackControl(activeStrategies.find((strategy) => strategy.type === "PULLBACK"));
       response.json({
         ok: true,
         service: "obsidra-api",
@@ -173,6 +174,7 @@ export function createApp() {
         botStatus: state?.status ?? "UNKNOWN",
         botReason: state?.reason ?? null,
         activeStrategies,
+        pullbackControl,
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
@@ -366,6 +368,138 @@ function publicLossBrainEntry(entry: {
 
 type PublicLossBrain = ReturnType<typeof publicLossBrainEntry>;
 
+type ActiveStrategy = {
+  id: string;
+  type: string;
+  exchange: string;
+  symbol: string;
+  mode: string;
+  params: Record<string, unknown>;
+};
+
+async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
+  if (!strategy) return null;
+  const params = strategy.params;
+  const timeframe = String(params.timeframe ?? "240");
+  const fastPeriod = numberParam(params.fastEma, 21);
+  const slowPeriod = numberParam(params.slowEma, 89);
+  const rsiLongBelow = numberParam(params.rsiLongBelow, 35);
+  const rsiShortAbove = numberParam(params.rsiShortAbove, 55);
+  const atrStopMultiplier = numberParam(params.atrStopMultiplier, 1.2);
+  const atrTakeProfitMultiplier = numberParam(params.atrTakeProfitMultiplier, 1.8);
+  const maxDailyTrades = numberParam(params.maxDailyTrades, 4);
+  const sinceDay = new Date();
+  sinceDay.setUTCHours(0, 0, 0, 0);
+  const [candlesDesc, tradesToday, recentTrades, openTrade] = await Promise.all([
+    prisma.historicalCandle.findMany({
+      where: { symbol: strategy.symbol, interval: timeframe },
+      orderBy: { openTime: "desc" },
+      take: Math.max(slowPeriod + 40, 160),
+    }),
+    prisma.trade.count({ where: { strategyId: strategy.id, createdAt: { gte: sinceDay } } }),
+    prisma.trade.findMany({
+      where: { strategyId: strategy.id, status: "CLOSED", pnlUsdt: { not: null } },
+      orderBy: { closedAt: "desc" },
+      take: 20,
+      select: { pnlUsdt: true, pnlPct: true, closeReason: true, closedAt: true },
+    }),
+    prisma.trade.findFirst({
+      where: { strategyId: strategy.id, status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, direction: true, entryPrice: true, stopLoss: true, takeProfit: true, openedAt: true, signalScore: true },
+    }),
+  ]);
+  const candles = candlesDesc.reverse();
+  const closes = candles.map((candle) => candle.close);
+  const latest = candles.at(-1);
+  const fast = closes.length >= fastPeriod ? ema(closes, fastPeriod).at(-1) ?? null : null;
+  const slow = closes.length >= slowPeriod ? ema(closes, slowPeriod).at(-1) ?? null : null;
+  const currentRsi = closes.length >= 15 ? rsi(closes.slice(-15)) : null;
+  const currentAtr = candles.length >= 15 ? averageTrueRange(candles.slice(-15)) : null;
+  const longReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast > slow && currentRsi <= rsiLongBelow && latest.close > slow);
+  const shortReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast < slow && currentRsi >= rsiShortAbove && latest.close < slow);
+  const direction = longReady ? "LONG" : shortReady ? "SHORT" : "WAITING";
+  const reason = pullbackReason({
+    candles: candles.length,
+    latestClose: latest?.close ?? null,
+    fast,
+    slow,
+    rsi: currentRsi,
+    rsiLongBelow,
+    rsiShortAbove,
+    tradesToday,
+    maxDailyTrades,
+    openTrade: Boolean(openTrade),
+    direction,
+  });
+  const wins = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0);
+  const losses = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) < 0);
+  const grossWins = wins.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+  const grossLosses = Math.abs(losses.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0));
+  const nextCloseAt = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)).toISOString() : null;
+  return {
+    strategyId: strategy.id,
+    symbol: strategy.symbol,
+    exchange: strategy.exchange,
+    mode: strategy.mode,
+    timeframe,
+    status: direction === "WAITING" ? "WAITING" : "SETUP_READY",
+    direction,
+    reason,
+    candleCount: candles.length,
+    latestCandleAt: latest ? new Date(Number(latest.openTime)).toISOString() : null,
+    nextCandleCloseAt: nextCloseAt,
+    price: latest?.close ?? null,
+    emaFast: fast,
+    emaSlow: slow,
+    rsi: currentRsi,
+    atr: currentAtr,
+    stopLossPreview: latest && currentAtr && direction !== "WAITING"
+      ? direction === "LONG" ? latest.close - currentAtr * atrStopMultiplier : latest.close + currentAtr * atrStopMultiplier
+      : null,
+    takeProfitPreview: latest && currentAtr && direction !== "WAITING"
+      ? direction === "LONG" ? latest.close + currentAtr * atrTakeProfitMultiplier : latest.close - currentAtr * atrTakeProfitMultiplier
+      : null,
+    tradesToday,
+    maxDailyTrades,
+    recentTrades: recentTrades.length,
+    winRate: recentTrades.length ? (wins.length / recentTrades.length) * 100 : null,
+    profitFactor: grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 10 : null,
+    recentPnlUsdt: recentTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0),
+    openTrade,
+  };
+}
+
+function pullbackReason(input: {
+  candles: number;
+  latestClose: number | null;
+  fast: number | null;
+  slow: number | null;
+  rsi: number | null;
+  rsiLongBelow: number;
+  rsiShortAbove: number;
+  tradesToday: number;
+  maxDailyTrades: number;
+  openTrade: boolean;
+  direction: string;
+}): string {
+  if (input.openTrade) return "Pullback trade is already open.";
+  if (input.tradesToday >= input.maxDailyTrades) return `Daily cap reached (${input.tradesToday}/${input.maxDailyTrades}).`;
+  if (input.candles < 120) return `Warming DOGE 4H data (${input.candles}/120 candles).`;
+  if (input.fast === null || input.slow === null || input.rsi === null || input.latestClose === null) return "Waiting for complete EMA/RSI data.";
+  if (input.direction === "LONG") return "Long setup ready: EMA trend is up and RSI is in pullback zone.";
+  if (input.direction === "SHORT") return "Short setup ready: EMA trend is down and RSI is in pullback zone.";
+  const trend = input.fast > input.slow ? "bullish" : input.fast < input.slow ? "bearish" : "flat";
+  const rsiHint = input.fast > input.slow
+    ? `need RSI <= ${input.rsiLongBelow.toFixed(1)}`
+    : `need RSI >= ${input.rsiShortAbove.toFixed(1)}`;
+  return `Waiting: 4H trend is ${trend}, RSI ${input.rsi.toFixed(1)} (${rsiHint}).`;
+}
+
+function numberParam(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 function buildAutoTuner(entries: PublicLossBrain[]) {
   const grouped = new Map<string, PublicLossBrain[]>();
   for (const entry of entries) {
@@ -424,6 +558,45 @@ function tunerRecommendation(severity: string, penalty: number, cooldown: number
   if (severity === "MEDIUM") return `Cautious mode: require +${penalty} score and wait ${cooldown}m before similar re-entry.`;
   if (severity === "LOW") return `Watch mode: small +${penalty} score guard active.`;
   return "No active loss-based adjustment.";
+}
+
+function ema(values: number[], period: number): number[] {
+  const smoothing = 2 / (period + 1);
+  const result: number[] = [];
+  let current = values[0] ?? 0;
+  for (const value of values) {
+    current = value * smoothing + current * (1 - smoothing);
+    result.push(current);
+  }
+  return result;
+}
+
+function rsi(values: number[]): number {
+  let gains = 0;
+  let losses = 0;
+  for (let index = 1; index < values.length; index++) {
+    const delta = values[index]! - values[index - 1]!;
+    if (delta >= 0) gains += delta;
+    else losses += Math.abs(delta);
+  }
+  if (losses === 0) return 100;
+  const relativeStrength = gains / losses;
+  return 100 - 100 / (1 + relativeStrength);
+}
+
+function averageTrueRange(candles: Array<{ high: number; low: number; close: number }>): number {
+  if (candles.length < 2) return 0;
+  const ranges = candles.slice(1).map((candle, index) => {
+    const previous = candles[index]!;
+    return Math.max(candle.high - candle.low, Math.abs(candle.high - previous.close), Math.abs(candle.low - previous.close));
+  });
+  return ranges.reduce((sum, value) => sum + value, 0) / ranges.length;
+}
+
+function intervalMs(timeframe: string): number {
+  if (timeframe === "240") return 4 * 60 * 60_000;
+  if (timeframe === "60") return 60 * 60_000;
+  return Math.max(1, Number(timeframe)) * 60_000;
 }
 
 function inferredSeverity(pnlPct: number | null): string | null {
