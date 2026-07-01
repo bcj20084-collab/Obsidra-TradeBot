@@ -5,6 +5,8 @@
   --color-panel: #0d111b;
   --color-border: rgba(255, 255, 255, 0.10);
   --color-cyan: #50e3c2;
+  --color-gold: #d6b26a;
+  --color-platinum: #f3ead7;
   --shadow-glow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 60px rgba(80, 227, 194, 0.055);
 }
 
@@ -22,9 +24,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 10% -10%, rgba(80, 227, 194, 0.14), transparent 34rem),
-    radial-gradient(circle at 88% 0%, rgba(114, 92, 255, 0.13), transparent 34rem),
-    radial-gradient(circle at 50% 120%, rgba(255, 174, 66, 0.07), transparent 32rem),
+    radial-gradient(circle at 10% -10%, rgba(214, 178, 106, 0.14), transparent 34rem),
+    radial-gradient(circle at 88% 0%, rgba(80, 227, 194, 0.10), transparent 34rem),
+    radial-gradient(circle at 50% 120%, rgba(243, 234, 215, 0.06), transparent 32rem),
     linear-gradient(135deg, #010208 0%, #050812 46%, #010208 100%);
 }
 
@@ -61,7 +63,17 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.08),
       0 24px 80px rgba(0,0,0,.45),
-      0 0 70px rgba(80,227,194,.045);
+      0 0 70px rgba(214,178,106,.05);
+    transition: transform .22s ease, border-color .22s ease, background .22s ease, box-shadow .22s ease;
+  }
+
+  .glass-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(214,178,106,.16);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.10),
+      0 28px 90px rgba(0,0,0,.52),
+      0 0 78px rgba(214,178,106,.065);
   }
 
   .card {
@@ -74,6 +86,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
   .button {
     @apply rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-bold text-white transition hover:border-cyan/40 hover:bg-cyan/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button:hover {
+    transform: translateY(-1px);
   }
 
   .glow-button {
@@ -90,24 +106,39 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obsidra-logo {
-    @apply grid h-14 w-14 shrink-0 place-items-center rounded-[1.35rem] border border-cyan/25 bg-black/35;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 38px rgba(80,227,194,.12);
+    @apply relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[1.35rem] border bg-black/45;
+    border-color: rgba(214,178,106,.30);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 42px rgba(214,178,106,.16);
+    transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
   }
 
   .obsidra-logo-compact {
     @apply h-12 w-12 rounded-2xl;
   }
 
-  .obsidra-logo svg {
-    @apply h-11 w-11;
-    filter: drop-shadow(0 0 18px rgba(80,227,194,.22));
+  .obsidra-logo::before {
+    @apply pointer-events-none absolute inset-0 content-[''];
+    background: linear-gradient(135deg, rgba(255,255,255,.18), transparent 38%, rgba(214,178,106,.14));
+    mix-blend-mode: screen;
+  }
+
+  .obsidra-logo::after {
+    @apply pointer-events-none absolute -inset-8 content-[''];
+    background: conic-gradient(from 180deg, transparent, rgba(214,178,106,.22), transparent, rgba(80,227,194,.12), transparent);
+    animation: obsidra-orbit 7s linear infinite;
+  }
+
+  .obsidra-logo img {
+    @apply relative z-10 h-full w-full object-cover;
+    object-position: center 38%;
+    filter: drop-shadow(0 0 18px rgba(214,178,106,.24));
   }
 
   .premium-sidebar {
     background:
       linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.018)),
-      linear-gradient(120deg, rgba(80,227,194,.055), transparent 36%),
-      radial-gradient(circle at 0% 0%, rgba(80,227,194,.15), transparent 17rem),
+      linear-gradient(120deg, rgba(214,178,106,.07), transparent 36%),
+      radial-gradient(circle at 0% 0%, rgba(214,178,106,.15), transparent 17rem),
       radial-gradient(circle at 90% 35%, rgba(124,92,255,.10), transparent 18rem),
       rgba(1,2,8,.92);
     box-shadow: inset -1px 0 0 rgba(255,255,255,.05);
@@ -116,6 +147,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .brand-card {
     @apply rounded-[1.7rem] border border-white/10 bg-black/25 p-3;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  }
+
+  .brand-card:hover .obsidra-logo {
+    transform: scale(1.03) rotate(-1deg);
   }
 
   .sidebar-section-title {
@@ -168,6 +203,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     @apply flex min-w-fit items-center gap-3 rounded-2xl border border-transparent px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-white/10 hover:bg-white/[0.055] hover:text-white xl:min-w-0;
   }
 
+  .nav-item:hover {
+    transform: translateX(2px);
+  }
+
   .nav-item-active {
     @apply border border-cyan/25 bg-cyan/10 text-cyan shadow-glow;
   }
@@ -194,8 +233,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .command-chip {
-    @apply inline-flex items-center gap-2 rounded-2xl border border-cyan/20 bg-cyan/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-cyan;
-    box-shadow: 0 0 28px rgba(80,227,194,.10);
+    @apply inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em];
+    border: 1px solid rgba(214,178,106,.22);
+    background: rgba(214,178,106,.08);
+    color: #d6b26a;
+    box-shadow: 0 0 28px rgba(214,178,106,.10);
   }
 
   .command-chip-muted {
@@ -264,7 +306,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .hero-eyebrow {
-    @apply inline-flex items-center gap-2 rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-cyan;
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em];
+    border: 1px solid rgba(214,178,106,.22);
+    background: rgba(214,178,106,.08);
+    color: #d6b26a;
   }
 
   .hero-pnl {
@@ -480,21 +525,21 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .obs-command-hero {
     @apply p-6 md:p-7;
     background:
-      radial-gradient(circle at 12% -10%, rgba(80,227,194,.18), transparent 22rem),
-      radial-gradient(circle at 92% 8%, rgba(251,191,36,.12), transparent 18rem),
+      radial-gradient(circle at 12% -10%, rgba(214,178,106,.18), transparent 22rem),
+      radial-gradient(circle at 92% 8%, rgba(80,227,194,.10), transparent 18rem),
       linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.018)),
       rgba(3,6,18,.88);
   }
 
   .obs-command-hero::after {
     @apply pointer-events-none absolute -bottom-28 -right-20 h-72 w-72 rounded-full content-[''];
-    background: radial-gradient(circle, rgba(80,227,194,.18), transparent 67%);
+    background: radial-gradient(circle, rgba(214,178,106,.18), transparent 67%);
     filter: blur(2px);
   }
 
   .obs-command-title {
     @apply relative z-10 mt-4 max-w-xl text-4xl font-black tracking-[-0.045em] text-white md:text-5xl;
-    background: linear-gradient(135deg, #fff, #50e3c2 48%, #fbbf24);
+    background: linear-gradient(135deg, #fff, #f3ead7 32%, #d6b26a 74%, #50e3c2);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -520,7 +565,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
   .obs-command-tile::before {
     @apply pointer-events-none absolute inset-x-0 top-0 h-px content-[''];
-    background: linear-gradient(90deg, transparent, rgba(80,227,194,.75), rgba(251,191,36,.45), transparent);
+    background: linear-gradient(90deg, transparent, rgba(214,178,106,.75), rgba(80,227,194,.42), transparent);
   }
 
   .obs-command-icon {
@@ -684,4 +729,16 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 @keyframes obsidra-pulse {
   0%, 100% { transform: scale(1); opacity: .82; }
   50% { transform: scale(1.18); opacity: 1; }
+}
+
+@keyframes obsidra-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .obsidra-logo::after,
+  .live-orb span {
+    animation: none;
+  }
 }
