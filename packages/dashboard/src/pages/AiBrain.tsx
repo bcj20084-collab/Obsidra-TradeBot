@@ -50,10 +50,10 @@ export function AiBrain({ metrics, trades, signals }: { metrics: Metrics; trades
               Obsidra AI Brain
             </div>
             <h2 className="mt-3 max-w-3xl text-4xl font-black tracking-tight text-white md:text-5xl">
-              Creierul botului: de ce intră, de ce așteaptă, ce învață.
+              Bot brain: why it enters, why it waits, what it learns.
             </h2>
             <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-400">
-              Tot ce era greu în dashboard stă aici: health score, no-trade reason, loss brain, tuner, safety, deploy și signal diagnostics.
+              The heavy diagnostics live here: health score, no-trade reason, loss brain, tuner, safety, deploy state and signal diagnostics.
             </p>
           </div>
           <div className={`ai-score-orb ${score >= 80 ? "ai-score-good" : score >= 55 ? "ai-score-warn" : "ai-score-bad"}`}>
@@ -66,7 +66,7 @@ export function AiBrain({ metrics, trades, signals }: { metrics: Metrics; trades
           <BrainStat icon={ShieldCheck} label="Safety" value={metrics.safetySupervisor?.level ?? "SYNC"} detail={metrics.safetySupervisor?.summary ?? "Waiting for supervisor"} />
           <BrainStat icon={RadioTower} label="Signals 24h" value={String(health?.signalsReady24h ?? metrics.signalsGenerated24h ?? 0)} detail={`${health?.signalsSkipped24h ?? metrics.signalsRejected24h ?? 0} skipped`} />
           <BrainStat icon={TrendingUp} label="Closed trades" value={String(closed.length)} detail={`${wins} wins / ${Math.max(0, closed.length - wins)} losses`} />
-          <BrainStat icon={Clock3} label="Last trade age" value={health?.lastTradeAgeHours == null ? "—" : `${health.lastTradeAgeHours.toFixed(1)}h`} detail={health?.botStatus ?? metrics.botStatus} />
+          <BrainStat icon={Clock3} label="Last trade age" value={health?.lastTradeAgeHours == null ? "-" : `${health.lastTradeAgeHours.toFixed(1)}h`} detail={health?.botStatus ?? metrics.botStatus} />
         </div>
       </section>
 
@@ -93,7 +93,7 @@ export function AiBrain({ metrics, trades, signals }: { metrics: Metrics; trades
           <div className="label">Next best action</div>
           <h3 className="mt-2 text-2xl font-black text-white">{nextAction(score, noTrade.kind)}</h3>
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            Dashboard-ul separă cockpit-ul de creier: Mission Control rămâne curat, iar aici vezi explicațiile și debugging-ul profund.
+            Mission Control stays clean. AI Brain shows the deep explanations, learning signals and debugging context.
           </p>
           {error ? <div className="mt-4 pill pill-danger">{error}</div> : <div className="mt-4 pill pill-success">Deep health online</div>}
         </div>
@@ -126,29 +126,29 @@ function calculateHealthScore(metrics: Metrics, health: DeepHealth | null): numb
 
 function noTradeReason(health: DeepHealth | null, signals: SignalFeedItem[], trades: Trade[]): { title: string; detail: string; kind: string } {
   if (health?.openPositionsCount) {
-    return { title: "Botul gestionează poziții deschise", detail: "Nu forțează intrări noi cât timp există expunere activă sau risc de duplicate.", kind: "open" };
+    return { title: "Bot is managing open exposure", detail: "New entries are avoided while an active position or duplicate-risk condition exists.", kind: "open" };
   }
   if (health?.pullbackControl?.reason) {
-    return { title: `${health.pullbackControl.symbol} așteaptă setup valid`, detail: health.pullbackControl.reason, kind: "waiting" };
+    return { title: `${health.pullbackControl.symbol} is waiting for a valid setup`, detail: health.pullbackControl.reason, kind: "waiting" };
   }
   if ((health?.actionableRiskRejected24h ?? 0) > 0) {
-    return { title: "Risk gate blochează setup-uri slabe", detail: `${health?.actionableRiskRejected24h} setup-uri au fost respinse în ultimele 24h pentru protecție.`, kind: "risk" };
+    return { title: "Risk gate is blocking weak setups", detail: `${health?.actionableRiskRejected24h} actionable setups were rejected in the last 24h to protect the account.`, kind: "risk" };
   }
   const latestSignal = signals[0];
   if (latestSignal) {
-    return { title: `Ultimul semnal: ${latestSignal.status ?? latestSignal.type}`, detail: `${latestSignal.symbol}: ${latestSignal.reason}`, kind: "signal" };
+    return { title: `Latest signal: ${latestSignal.status ?? latestSignal.type}`, detail: `${latestSignal.symbol}: ${latestSignal.reason}`, kind: "signal" };
   }
   if (!trades.length) {
-    return { title: "Așteaptă primul setup calificat", detail: "Nu există încă trade-uri în feed. Scannerul rulează și va intra doar când edge-ul trece filtrele.", kind: "idle" };
+    return { title: "Waiting for the first qualified setup", detail: "No trades are in the feed yet. The scanner will enter only when edge, trend and risk filters pass.", kind: "idle" };
   }
-  return { title: "Scanner activ, fără intrare nouă", detail: "Botul citește piața și va executa doar când trendul, scorul și riscul sunt aliniate.", kind: "idle" };
+  return { title: "Scanner active, no new entry", detail: "The bot is reading the market and will execute only when trend, score and risk align.", kind: "idle" };
 }
 
 function nextAction(score: number, kind: string): string {
-  if (score < 55) return "Verifică risk, loss brain și cooldown-urile înainte de optimizare.";
-  if (kind === "waiting") return "Lasă botul să aștepte confirmarea; nu forța intrarea.";
-  if (kind === "risk") return "Uită-te la setup-urile respinse și ajustează strategia doar după date.";
-  return "Continuă paper test și strânge sample mai mare pentru strategie.";
+  if (score < 55) return "Review risk, loss brain and cooldowns before optimizing.";
+  if (kind === "waiting") return "Let the bot wait for confirmation; do not force an entry.";
+  if (kind === "risk") return "Inspect rejected setups and adjust strategy only after enough data.";
+  return "Continue paper testing and build a larger sample before changing live risk.";
 }
 
 function BrainStat({ icon: Icon, label, value, detail }: { icon: typeof BrainCircuit; label: string; value: string; detail: string }) {
