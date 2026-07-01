@@ -15,6 +15,7 @@ import { TopBotParity } from "../components/TopBotParity";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
 import { trpc } from "../lib/api";
+import { AiActivityCommand } from "../components/AiActivityCommand";
 
 export function Overview({ metrics, trades, signals }: { metrics: Metrics; trades: Trade[]; signals: SignalFeedItem[] }) {
   const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
@@ -144,6 +145,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
       <DeepHealthPanel />
 
       <StrategyOptimizerCenter metrics={metrics} trades={trades} />
+
+      <AiActivityCommand metrics={metrics} trades={trades} signals={signals} />
 
       <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
 

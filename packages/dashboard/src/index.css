@@ -549,6 +549,66 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .obs-command-warn .obs-command-pulse { @apply bg-amber-300; box-shadow: 0 0 0 7px rgba(251,191,36,.07), 0 0 22px rgba(251,191,36,.75); }
   .obs-command-bad .obs-command-pulse { @apply bg-rose-400; box-shadow: 0 0 0 7px rgba(251,113,133,.07), 0 0 22px rgba(251,113,133,.75); }
 
+  .ai-activity-grid {
+    @apply grid gap-6 2xl:grid-cols-[1.25fr_.75fr];
+  }
+
+  .ai-activity-panel,
+  .ai-decision-panel {
+    @apply overflow-hidden;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(80,227,194,.12), transparent 24rem),
+      radial-gradient(circle at 92% 10%, rgba(124,92,255,.12), transparent 22rem),
+      linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.018)),
+      rgba(255,255,255,.04);
+  }
+
+  .ai-activity-timeline {
+    @apply relative space-y-3 pl-6;
+  }
+
+  .ai-activity-timeline::before {
+    @apply absolute bottom-4 left-2 top-4 w-px bg-cyan/20 content-[''];
+  }
+
+  .ai-activity-row {
+    @apply relative;
+  }
+
+  .ai-activity-dot {
+    @apply absolute -left-[1.22rem] top-5 h-3 w-3 rounded-full border border-cyan bg-obsidian;
+    box-shadow: 0 0 18px rgba(80,227,194,.9);
+  }
+
+  .ai-activity-good { @apply border-emerald-300 bg-emerald-400; box-shadow: 0 0 18px rgba(52,211,153,.9); }
+  .ai-activity-warn { @apply border-amber-300 bg-amber-300; box-shadow: 0 0 18px rgba(251,191,36,.8); }
+  .ai-activity-bad { @apply border-rose-300 bg-rose-400; box-shadow: 0 0 18px rgba(251,113,133,.8); }
+
+  .ai-activity-card {
+    @apply rounded-[1.55rem] border border-white/10 bg-black/25 p-4 transition hover:border-cyan/20 hover:bg-black/35;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+  }
+
+  .ai-verdict-score {
+    @apply grid h-16 w-16 shrink-0 place-items-center rounded-[1.35rem] border font-mono text-2xl font-black;
+  }
+
+  .ai-verdict-good {
+    @apply border-emerald-400/25 bg-emerald-400/10 text-emerald-300;
+  }
+
+  .ai-verdict-warn {
+    @apply border-amber-300/25 bg-amber-300/10 text-amber-300;
+  }
+
+  .ai-verdict-bad {
+    @apply border-rose-400/25 bg-rose-400/10 text-rose-300;
+  }
+
+  .decision-line {
+    @apply flex gap-3 rounded-[1.45rem] border border-white/10 bg-black/25 p-4;
+  }
+
   .metric-tile {
     @apply rounded-3xl border border-white/10 bg-black/25 p-4;
   }
