@@ -58,6 +58,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .card,
   .glass-card {
     @apply rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-glow backdrop-blur-xl;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.08),
+      0 24px 80px rgba(0,0,0,.45),
+      0 0 70px rgba(80,227,194,.045);
   }
 
   .card {
@@ -102,6 +106,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .premium-sidebar {
     background:
       linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.018)),
+      linear-gradient(120deg, rgba(80,227,194,.055), transparent 36%),
       radial-gradient(circle at 0% 0%, rgba(80,227,194,.15), transparent 17rem),
       radial-gradient(circle at 90% 35%, rgba(124,92,255,.10), transparent 18rem),
       rgba(1,2,8,.92);
@@ -124,6 +129,27 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .sidebar-card {
     @apply rounded-[1.6rem] border border-white/10 bg-black/25 p-4;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+  }
+
+  .sidebar-command-panel {
+    @apply rounded-[1.8rem] border border-cyan/15 bg-cyan/[0.055] p-4;
+    background:
+      radial-gradient(circle at 20% 0%, rgba(80,227,194,.18), transparent 14rem),
+      linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)),
+      rgba(0,0,0,.28);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 38px rgba(80,227,194,.06);
+  }
+
+  .sidebar-command-icon {
+    @apply grid h-10 w-10 place-items-center rounded-2xl border border-cyan/25 bg-cyan/10 text-cyan;
+  }
+
+  .sidebar-flow-step {
+    @apply flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3;
+  }
+
+  .sidebar-flow-index {
+    @apply grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] font-mono text-xs font-black text-cyan;
   }
 
   .dashboard-main {
@@ -161,6 +187,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .command-chip {
     @apply inline-flex items-center gap-2 rounded-2xl border border-cyan/20 bg-cyan/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-cyan;
     box-shadow: 0 0 28px rgba(80,227,194,.10);
+  }
+
+  .command-chip-muted {
+    @apply border-white/10 bg-white/[0.045] text-slate-300;
+    box-shadow: none;
   }
 
   .command-chip-dot {
@@ -203,11 +234,28 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .hero-card {
-    @apply overflow-hidden p-6 md:p-8;
+    @apply relative overflow-hidden p-6 md:p-8;
     background:
       radial-gradient(circle at 18% 0%, rgba(80,227,194,.18), transparent 25rem),
       radial-gradient(circle at 88% 10%, rgba(124,92,255,.14), transparent 24rem),
+      linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.018)),
       rgba(255,255,255,.045);
+  }
+
+  .hero-card > * {
+    @apply relative z-10;
+  }
+
+  .premium-hero-noise {
+    @apply pointer-events-none absolute inset-0 z-0 opacity-60;
+    background:
+      linear-gradient(90deg, transparent, rgba(255,255,255,.025), transparent),
+      radial-gradient(circle at 78% 26%, rgba(80,227,194,.14), transparent 12rem);
+    mask-image: linear-gradient(90deg, transparent, black 20%, black 86%, transparent);
+  }
+
+  .hero-eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-cyan;
   }
 
   .hero-pnl {
@@ -216,6 +264,44 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
   .premium-command-grid {
     @apply grid gap-6 2xl:grid-cols-[1.35fr_.65fr];
+  }
+
+  .premium-command-strip {
+    @apply grid gap-3 rounded-[1.8rem] border border-white/10 bg-black/25 p-3 md:grid-cols-4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+  }
+
+  .command-node {
+    @apply flex items-center gap-3 rounded-[1.35rem] border border-white/10 bg-white/[0.035] p-3;
+  }
+
+  .command-node-icon {
+    @apply grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan;
+  }
+
+  .premium-ops-grid {
+    @apply grid gap-6 2xl:grid-cols-[1.35fr_.65fr];
+  }
+
+  .premium-flow-card {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(80,227,194,.12), transparent 22rem),
+      rgba(255,255,255,.04);
+  }
+
+  .premium-vault-card {
+    background:
+      radial-gradient(circle at 90% 0%, rgba(124,92,255,.16), transparent 18rem),
+      radial-gradient(circle at 20% 100%, rgba(80,227,194,.10), transparent 16rem),
+      rgba(255,255,255,.04);
+  }
+
+  .pipeline-step {
+    @apply rounded-[1.65rem] border border-white/10 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-black/35;
+  }
+
+  .pipeline-step-index {
+    @apply inline-grid h-9 w-9 place-items-center rounded-2xl border border-cyan/20 bg-cyan/10 font-mono text-xs font-black text-cyan;
   }
 
   .premium-oracle {

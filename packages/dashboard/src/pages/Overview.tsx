@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, ArrowDownRight, ArrowUpRight, Bot, Radar, Shield, Target, Zap } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, Bot, BrainCircuit, CandlestickChart, CheckCircle2, Radar, Shield, Sparkles, Target, Zap } from "lucide-react";
 import type { Metrics, ReplayCandle, SignalFeedItem, Trade, TradeDetail } from "../lib/types";
 import { DeepHealthPanel } from "../components/DeepHealthPanel";
 import { EquityCurve } from "../components/EquityCurve";
@@ -44,11 +44,15 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
     <div className="space-y-6">
       <section className="hero-grid">
         <div className="glass-card hero-card">
+          <div className="premium-hero-noise" />
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="label">Portfolio intelligence</div>
+              <div className="hero-eyebrow">
+                <Sparkles size={14} />
+                Portfolio intelligence
+              </div>
               <h2 className="mt-3 max-w-3xl text-4xl font-black tracking-tight text-white md:text-5xl">
-                Premium paper-trading OS for strategy research and live intelligence.
+                Premium black cockpit pentru bot-ul tău smart.
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
                 Obsidra is running protected paper execution, DOGE 4H pullback intelligence, forward-test reality match, and risk checks before any real-money mode is considered.
@@ -60,7 +64,14 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
             </div>
           </div>
 
-          <div className="mt-8 grid gap-3 md:grid-cols-4">
+          <div className="premium-command-strip mt-8">
+            <CommandNode icon={BrainCircuit} label="Brain" value="Auto scan" />
+            <CommandNode icon={Shield} label="Safety" value="Risk gated" />
+            <CommandNode icon={CandlestickChart} label="Replay" value="Live trade view" />
+            <CommandNode icon={CheckCircle2} label="Mode" value="Paper safe" />
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
             <HeroStat label="Equity" value={`$${equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={Target} />
             <HeroStat label="Bot status" value={metrics.botStatus} icon={Bot} tone={metrics.botStatus === "RUNNING" ? "good" : "warn"} />
             <HeroStat label="Regime" value={metrics.marketRegime} icon={Radar} />
@@ -90,6 +101,37 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
         <ModuleTile label="2. Risk" value="Guarded Paper" detail="Portfolio + loss cooldown" />
         <ModuleTile label="3. Execution" value="Strategy Timeout" detail="72 candles / 288h max hold" />
         <ModuleTile label="4. Learning" value="Reality Match" detail="Backtest vs paper behavior" />
+      </section>
+
+      <section className="premium-ops-grid">
+        <div className="glass-card premium-flow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="label">Automation pipeline</div>
+              <h3 className="mt-2 text-2xl font-black">Signal → Risk → Trade → Learn</h3>
+            </div>
+            <span className="pill pill-success">operator ready</span>
+          </div>
+          <div className="mt-6 grid gap-3 lg:grid-cols-4">
+            <PipelineStep step="01" title="Scan market" text="DOGE 4H candle, EMA trend, RSI pullback, ATR volatility." />
+            <PipelineStep step="02" title="Score setup" text="Checklist, edge score, forward-test health and daily cap." />
+            <PipelineStep step="03" title="Paper execute" text="Entry, stop, take profit, max hold and journal events." />
+            <PipelineStep step="04" title="Improve" text="Reality match compares live paper results with backtest profile." />
+          </div>
+        </div>
+
+        <div className="glass-card premium-vault-card">
+          <div className="label">Premium feel</div>
+          <h3 className="mt-2 text-2xl font-black">Dark, clean, boss-level.</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            Layout-ul e gândit să vezi imediat ce contează: status, risc, strategie, execuții și ce învață bot-ul.
+          </p>
+          <div className="mt-5 space-y-3">
+            <VaultItem text="Sidebar organizat cap-coadă" />
+            <VaultItem text="Trade replay când apeși pe trade" />
+            <VaultItem text="Control center pentru strategia activă" />
+          </div>
+        </div>
       </section>
 
       <DeepHealthPanel />
@@ -169,6 +211,20 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
   );
 }
 
+function CommandNode({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
+  return (
+    <div className="command-node">
+      <div className="command-node-icon">
+        <Icon size={16} />
+      </div>
+      <div>
+        <div className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">{label}</div>
+        <div className="mt-0.5 text-sm font-black text-white">{value}</div>
+      </div>
+    </div>
+  );
+}
+
 function HeroStat({ label, value, icon: Icon, tone }: { label: string; value: string; icon: typeof Activity; tone?: "good" | "warn" }) {
   return (
     <div className="metric-tile">
@@ -189,6 +245,25 @@ function RiskLine({ label, value, limit, percent, positive = false }: { label: s
       <div className="h-2 overflow-hidden rounded-full bg-white/5">
         <div className={`h-full rounded-full ${positive ? "bg-emerald-400" : "bg-cyan"}`} style={{ width: `${Math.max(3, Math.min(100, percent))}%` }} />
       </div>
+    </div>
+  );
+}
+
+function PipelineStep({ step, title, text }: { step: string; title: string; text: string }) {
+  return (
+    <div className="pipeline-step">
+      <div className="pipeline-step-index">{step}</div>
+      <div className="mt-4 text-lg font-black text-white">{title}</div>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function VaultItem({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm font-bold text-slate-300">
+      <CheckCircle2 className="text-cyan" size={16} />
+      {text}
     </div>
   );
 }

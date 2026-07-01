@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import {
   Activity,
   CandlestickChart,
+  Cpu,
   FlaskConical,
   Gauge,
   Layers3,
@@ -10,6 +11,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
+  TimerReset,
   Workflow,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -174,6 +176,22 @@ export default function App() {
 
         <div className="mt-7 hidden space-y-4 xl:block">
           <div className="sidebar-section-title">System stack</div>
+          <div className="sidebar-command-panel">
+            <div className="flex items-center gap-3">
+              <div className="sidebar-command-icon">
+                <Cpu size={18} />
+              </div>
+              <div>
+                <div className="text-sm font-black text-white">Autopilot Core</div>
+                <div className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan/70">paper intelligence</div>
+              </div>
+            </div>
+            <div className="mt-4 space-y-3">
+              <FlowStep index="01" title="Scan" text="Market structure + volume" />
+              <FlowStep index="02" title="Approve" text="Risk, exposure, guardrails" />
+              <FlowStep index="03" title="Replay" text="Trade lifecycle + journal" />
+            </div>
+          </div>
           <div className="sidebar-card">
             <div className="label">Runtime mode</div>
             <div className="mt-3 text-lg font-bold text-white">{runtime.mode}</div>
@@ -223,6 +241,10 @@ export default function App() {
               <span className="command-chip-dot" />
               DOGE Pullback OS
             </div>
+            <div className="command-chip command-chip-muted">
+              <TimerReset size={14} />
+              10s sync
+            </div>
             <button className="button glow-button flex items-center justify-center gap-2" disabled={refreshing} onClick={() => void refresh()}>
               <RefreshCw className={refreshing ? "animate-spin" : ""} size={16} />
               Refresh
@@ -243,6 +265,18 @@ export default function App() {
           </Routes>
         </Suspense>
       </main>
+    </div>
+  );
+}
+
+function FlowStep({ index, title, text }: { index: string; title: string; text: string }) {
+  return (
+    <div className="sidebar-flow-step">
+      <div className="sidebar-flow-index">{index}</div>
+      <div>
+        <div className="text-sm font-black text-white">{title}</div>
+        <div className="text-xs text-slate-500">{text}</div>
+      </div>
     </div>
   );
 }
