@@ -42,7 +42,7 @@ body::before {
   mask-image: radial-gradient(circle at 50% 20%, black, transparent 72%);
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
 ::selection { background: rgba(80, 227, 194, 0.28); }
@@ -60,6 +60,8 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .card,
   .glass-card {
     @apply rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-glow backdrop-blur-xl;
+    min-width: 0;
+    overflow-wrap: anywhere;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,.08),
       0 24px 80px rgba(0,0,0,.45),
@@ -240,6 +242,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .premium-topbar,
   .login-panel {
     @apply rounded-[2rem] border border-white/10 bg-white/[0.04] p-4 shadow-glow backdrop-blur-xl;
+    min-width: 0;
     background:
       linear-gradient(135deg, rgba(255,255,255,.065), rgba(255,255,255,.025)),
       radial-gradient(circle at 90% 0%, rgba(80,227,194,.10), transparent 20rem);
@@ -275,7 +278,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .topbar-actions {
-    @apply flex flex-wrap items-center gap-3;
+    @apply flex min-w-0 flex-wrap items-center gap-3;
   }
 
   .command-chip {
@@ -327,7 +330,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .hero-grid {
-    @apply grid gap-6 2xl:grid-cols-[1.55fr_.75fr];
+    @apply grid gap-5 2xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,.75fr)];
   }
 
   .hero-card {
@@ -363,16 +366,16 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .premium-command-grid {
-    @apply grid gap-6 2xl:grid-cols-[1.35fr_.65fr];
+    @apply grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)];
   }
 
   .premium-command-strip {
-    @apply grid gap-3 rounded-[1.8rem] border border-white/10 bg-black/25 p-3 md:grid-cols-4;
+    @apply grid gap-3 rounded-[1.8rem] border border-white/10 bg-black/25 p-3 sm:grid-cols-2 xl:grid-cols-4;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
   }
 
   .command-node {
-    @apply flex items-center gap-3 rounded-[1.35rem] border border-white/10 bg-white/[0.035] p-3;
+    @apply flex min-w-0 items-center gap-3 rounded-[1.35rem] border border-white/10 bg-white/[0.035] p-3;
   }
 
   .command-node-icon {
@@ -380,7 +383,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .premium-ops-grid {
-    @apply grid gap-6 2xl:grid-cols-[1.35fr_.65fr];
+    @apply grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)];
   }
 
   .premium-flow-card {
@@ -397,11 +400,47 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .pipeline-step {
-    @apply rounded-[1.65rem] border border-white/10 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-black/35;
+    @apply min-w-0 rounded-[1.65rem] border border-white/10 bg-black/25 p-4 transition hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-black/35;
   }
 
   .pipeline-step-index {
     @apply inline-grid h-9 w-9 place-items-center rounded-2xl border border-cyan/20 bg-cyan/10 font-mono text-xs font-black text-cyan;
+  }
+
+  .dashboard-accordion-stack {
+    @apply space-y-4;
+  }
+
+  .dashboard-accordion {
+    @apply overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-glow backdrop-blur-xl;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(214,178,106,.10), transparent 20rem),
+      radial-gradient(circle at 95% 10%, rgba(80,227,194,.08), transparent 18rem),
+      rgba(255,255,255,.032);
+  }
+
+  .dashboard-accordion summary {
+    @apply flex cursor-pointer list-none items-center justify-between gap-4 p-5 transition hover:bg-white/[0.035];
+  }
+
+  .dashboard-accordion summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .dashboard-accordion summary strong {
+    @apply mt-1 block text-xl font-black text-white;
+  }
+
+  .dashboard-accordion summary::after {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-white/10 bg-black/25 text-lg font-black text-gold content-['+'];
+  }
+
+  .dashboard-accordion[open] summary::after {
+    content: "−";
+  }
+
+  .dashboard-accordion-body {
+    @apply space-y-5 border-t border-white/10 p-5;
   }
 
   .premium-oracle {

@@ -44,6 +44,129 @@ const emptyMetrics: Metrics = {
   adaptiveConfig: {},
 };
 
+const previewMetrics: Metrics = {
+  ...emptyMetrics,
+  totalPnlUsdt: 184.72,
+  totalPnlPct: 1.84,
+  winRate: 58.4,
+  profitFactor: 1.76,
+  sharpeRatio: 1.42,
+  maxDrawdown: 3.2,
+  currentDrawdown: 0.7,
+  tradesLast24h: 6,
+  totalTrades: 48,
+  totalFeesPaidUsdt: 4.18,
+  signalsGenerated24h: 23,
+  signalsRejected24h: 11,
+  totalExposureUsdt: 146.5,
+  openPositionsCount: 2,
+  mlAccuracy: 63.8,
+  botStatus: "RUNNING",
+  marketRegime: "PULLBACK WATCH",
+  equityCurve: Array.from({ length: 14 }, (_, index) => ({
+    date: new Date(Date.now() - (13 - index) * 86_400_000).toISOString().slice(0, 10),
+    equity: 10_000 + index * 18 + Math.sin(index / 1.7) * 52,
+  })),
+  adaptiveConfig: { edgeScore: 72, risk: 0.45, cooldown: 20 },
+  safetySupervisor: {
+    level: "OK",
+    score: 91,
+    summary: "Paper execution protected. Risk gate is active and exposure is controlled.",
+    updatedAt: new Date().toISOString(),
+    checks: [
+      { name: "Execution mode", status: "PASS", detail: "Paper trading only" },
+      { name: "Daily loss", status: "PASS", detail: "Below guardrail" },
+      { name: "Open exposure", status: "PASS", detail: "2 positions monitored" },
+    ],
+  },
+};
+
+const previewTrades: Trade[] = [
+  {
+    id: "preview-1",
+    createdAt: new Date().toISOString(),
+    symbol: "DOGEUSDT",
+    exchange: "BINANCE",
+    strategyId: "doge-4h-pullback",
+    direction: "LONG",
+    entryPrice: 0.1234,
+    exitPrice: null,
+    stopLoss: 0.1198,
+    takeProfit: 0.132,
+    pnlUsdt: 12.45,
+    feeUsdt: 0.18,
+    slippage: 0.01,
+    signalScore: 78,
+    holdTimeSeconds: null,
+    status: "OPEN",
+    executionMode: "PAPER",
+    pnlPct: 2.14,
+    openedAt: new Date().toISOString(),
+    marketRegime: "bullish pullback",
+  },
+  {
+    id: "preview-2",
+    createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+    symbol: "BTCUSDT",
+    exchange: "BINANCE",
+    strategyId: "trend-btcusdt",
+    direction: "LONG",
+    entryPrice: 61_240,
+    exitPrice: 61_940,
+    stopLoss: 60_420,
+    takeProfit: 62_200,
+    pnlUsdt: 27.9,
+    feeUsdt: 0.42,
+    slippage: 0.02,
+    signalScore: 71,
+    holdTimeSeconds: 5_400,
+    status: "CLOSED",
+    executionMode: "PAPER",
+    pnlPct: 1.14,
+    closeReason: "take_profit",
+    openedAt: new Date(Date.now() - 5_400_000).toISOString(),
+    closedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    marketRegime: "trend",
+  },
+];
+
+const previewSignals: SignalFeedItem[] = [
+  {
+    id: "signal-preview-1",
+    type: "BUY",
+    createdAt: new Date().toISOString(),
+    symbol: "DOGEUSDT",
+    exchange: "BINANCE",
+    direction: "LONG",
+    status: "READY",
+    score: 78,
+    confidence: 64,
+    reason: "4H pullback confirmed, risk gate passed",
+    price: 0.1234,
+    stopLoss: 0.1198,
+    takeProfit: 0.132,
+    regime: "bullish pullback",
+    details: { htfTrend: "bullish", atrPct: 2.1 },
+  },
+  {
+    id: "signal-preview-2",
+    type: "SKIP",
+    createdAt: new Date(Date.now() - 900_000).toISOString(),
+    symbol: "ETHUSDT",
+    exchange: "BINANCE",
+    direction: "LONG",
+    status: "REJECTED",
+    score: 49,
+    confidence: 51,
+    reason: "Risk reward below threshold",
+    price: 3420,
+    stopLoss: 3368,
+    takeProfit: 3488,
+    regime: "chop",
+    details: { reject: "rr_too_low" },
+  },
+];
+
 const navGroups = [
   {
     title: "Command",
@@ -76,6 +199,7 @@ const routeMeta = {
 
 export default function App() {
   const location = useLocation();
+  const previewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview");
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -85,6 +209,14 @@ export default function App() {
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
 
   const refresh = useCallback(async () => {
+    if (previewMode) {
+      setMetrics(previewMetrics);
+      setTrades(previewTrades);
+      setSignals(previewSignals);
+      setConnectionError("");
+      setLastRefreshAt(new Date());
+      return;
+    }
     setRefreshing(true);
     try {
       const [nextMetrics, nextTrades, nextSignals] = await Promise.all([
@@ -102,9 +234,19 @@ export default function App() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [previewMode]);
 
-  useEffect(() => { void hasSession().then(setAuthenticated); }, []);
+  useEffect(() => {
+    if (previewMode) {
+      setAuthenticated(true);
+      setMetrics(previewMetrics);
+      setTrades(previewTrades);
+      setSignals(previewSignals);
+      setLastRefreshAt(new Date());
+      return;
+    }
+    void hasSession().then(setAuthenticated).catch(() => setAuthenticated(false));
+  }, [previewMode]);
   useEffect(() => {
     if (!authenticated) return;
     void refresh();

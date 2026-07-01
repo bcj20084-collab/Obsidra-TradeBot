@@ -140,21 +140,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
         </div>
       </section>
 
-      <SystemDeployCenter />
-
-      <DeepHealthPanel />
-
-      <StrategyOptimizerCenter metrics={metrics} trades={trades} />
-
-      <AiActivityCommand metrics={metrics} trades={trades} signals={signals} />
-
-      <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
-
       <MetricsCards metrics={metrics} />
-
-      <SafetySupervisor status={metrics.safetySupervisor} />
-
-      <SignalDiagnostics signals={signals} />
 
       <section className="grid gap-6 2xl:grid-cols-[1.4fr_.8fr]">
         <div className="glass-card">
@@ -216,7 +202,39 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
 
       <SignalFeed items={signals} />
 
-      <TopBotParity />
+      <section className="dashboard-accordion-stack">
+        <details className="dashboard-accordion" open>
+          <summary>
+            <span>
+              <span className="label">AI activity</span>
+              <strong>Bot intelligence & safety</strong>
+            </span>
+            <span className="pill">premium panel</span>
+          </summary>
+          <div className="dashboard-accordion-body">
+            <AiActivityCommand metrics={metrics} trades={trades} signals={signals} />
+            <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
+            <SafetySupervisor status={metrics.safetySupervisor} />
+            <SignalDiagnostics signals={signals} />
+          </div>
+        </details>
+
+        <details className="dashboard-accordion">
+          <summary>
+            <span>
+              <span className="label">System layer</span>
+              <strong>Deploy, health & optimizer</strong>
+            </span>
+            <span className="pill">advanced</span>
+          </summary>
+          <div className="dashboard-accordion-body">
+            <SystemDeployCenter />
+            <DeepHealthPanel />
+            <StrategyOptimizerCenter metrics={metrics} trades={trades} />
+            <TopBotParity />
+          </div>
+        </details>
+      </section>
 
       <TradeReplayPanel trade={selectedTrade} candles={replayCandles} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
     </div>
