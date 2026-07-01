@@ -52,12 +52,13 @@ describe("live trading environment gate", () => {
     expect(env.MASTER_SECRET).toBe("development-only-master-secret-32");
   });
 
-  it("rejects the development MASTER_SECRET fallback in production", () => {
+  it("uses JWT_SECRET as a production-safe fallback when MASTER_SECRET is absent", () => {
     const { MASTER_SECRET: _masterSecret, ...withoutMasterSecret } = base;
-    expect(() => envSchema.parse({
+    const env = envSchema.parse({
       ...withoutMasterSecret,
       NODE_ENV: "production",
-    })).toThrow(/production MASTER_SECRET/);
+    });
+    expect(env.MASTER_SECRET).toBe(base.JWT_SECRET);
   });
 
   it("rejects the literal development MASTER_SECRET in production even when explicitly provided", () => {
@@ -65,6 +66,6 @@ describe("live trading environment gate", () => {
       ...base,
       NODE_ENV: "production",
       MASTER_SECRET: "development-only-master-secret-32",
-    })).toThrow(/production MASTER_SECRET/);
+    })).toThrow(/production MASTER_SECRET|development fallback/);
   });
 });

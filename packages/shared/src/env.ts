@@ -60,7 +60,7 @@ export const envSchema = z
     DASHBOARD_PASSWORD: z.string().default(""),
     DASHBOARD_PASSWORD_HASH: z.string().default(""),
     JWT_SECRET: z.string().min(32),
-    MASTER_SECRET: z.string().min(32).default(developmentMasterSecret),
+    MASTER_SECRET: z.string().min(32).optional(),
     ALLOWED_IPS: z.string().default(""),
     STRATEGY_TREND_ENABLED: boolString.default(true),
     STRATEGY_PULLBACK_ENABLED: boolString.default(true),
@@ -129,7 +129,7 @@ export const envSchema = z
     if (env.NODE_ENV === "production" && env.MASTER_SECRET === developmentMasterSecret) {
       ctx.addIssue({
         code: "custom",
-        message: "Set an explicit production MASTER_SECRET; the development fallback is not allowed",
+        message: "Set a safe production MASTER_SECRET; the development fallback is not allowed",
         path: ["MASTER_SECRET"],
       });
     }
@@ -176,7 +176,11 @@ export const envSchema = z
         ctx.addIssue({ code: "custom", message: `Enabled ${exchange} strategies must use the same paper/live mode`, path: ["STRATEGY_TREND_ENABLED"] });
       }
     }
-  });
+  })
+  .transform((env) => ({
+    ...env,
+    MASTER_SECRET: env.MASTER_SECRET ?? (env.NODE_ENV === "production" ? env.JWT_SECRET : developmentMasterSecret),
+  }));
 
 export type Env = z.infer<typeof envSchema>;
 
