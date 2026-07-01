@@ -595,7 +595,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-center {
-    @apply grid gap-4 2xl:grid-cols-[minmax(320px,.82fr)_minmax(0,1.55fr)];
+    @apply grid gap-4 2xl:grid-cols-[minmax(300px,.72fr)_minmax(0,1.65fr)];
   }
 
   .obs-command-hero,
@@ -608,7 +608,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-hero {
-    @apply p-6 md:p-7;
+    @apply p-5 md:p-6;
     background:
       radial-gradient(circle at 12% -10%, rgba(214,178,106,.18), transparent 22rem),
       radial-gradient(circle at 92% 8%, rgba(80,227,194,.10), transparent 18rem),
@@ -623,7 +623,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-title {
-    @apply relative z-10 mt-4 max-w-xl text-4xl font-black tracking-[-0.045em] text-white md:text-5xl;
+    @apply relative z-10 mt-3 max-w-xl text-3xl font-black tracking-[-0.045em] text-white md:text-4xl;
     background: linear-gradient(135deg, #fff, #f3ead7 32%, #d6b26a 74%, #50e3c2);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -631,7 +631,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-sub {
-    @apply relative z-10 mt-4 max-w-2xl text-sm leading-6 text-slate-400;
+    @apply relative z-10 mt-3 max-w-2xl text-sm leading-6 text-slate-400;
   }
 
   .obs-command-grid {
@@ -639,7 +639,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-tile {
-    @apply min-h-[156px] p-4 transition hover:-translate-y-0.5 hover:border-cyan/25 hover:bg-black/40;
+    @apply min-h-[128px] p-3.5 transition hover:-translate-y-0.5 hover:border-cyan/25 hover:bg-black/40;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -654,7 +654,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-icon {
-    @apply grid h-10 w-10 place-items-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan;
+    @apply grid h-9 w-9 place-items-center rounded-2xl border border-cyan/20 bg-cyan/10 text-cyan;
   }
 
   .obs-command-pulse {
@@ -663,7 +663,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .obs-command-tile strong {
-    @apply mt-2 block font-mono text-2xl font-black tracking-[-0.04em] text-white;
+    @apply mt-1.5 block font-mono text-xl font-black tracking-[-0.04em] text-white;
   }
 
   .obs-command-tile span:last-child {

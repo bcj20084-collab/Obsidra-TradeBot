@@ -203,7 +203,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
       <SignalFeed items={signals} />
 
       <section className="dashboard-accordion-stack">
-        <details className="dashboard-accordion" open>
+        <details className="dashboard-accordion">
           <summary>
             <span>
               <span className="label">AI activity</span>
