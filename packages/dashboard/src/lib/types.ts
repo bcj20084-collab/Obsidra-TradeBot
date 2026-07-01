@@ -129,6 +129,9 @@ export interface PullbackControl {
   winRate: number | null;
   profitFactor: number | null;
   recentPnlUsdt: number;
+  healthLevel: "LEARNING" | "HEALTHY" | "WATCH" | "DANGER";
+  healthReason: string;
+  autoPauseRecommended: boolean;
   openTrade: {
     id: string;
     direction: string;

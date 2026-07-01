@@ -436,6 +436,9 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   const losses = recentTrades.filter((trade) => (trade.pnlUsdt ?? 0) < 0);
   const grossWins = wins.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
   const grossLosses = Math.abs(losses.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0));
+  const recentPnlUsdt = recentTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+  const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 10 : null;
+  const performanceGuard = pullbackPerformanceGuard(recentTrades.map((trade) => trade.pnlUsdt ?? 0), profitFactor, recentPnlUsdt);
   const nextCloseAt = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)).toISOString() : null;
   return {
     strategyId: strategy.id,
@@ -464,10 +467,36 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     maxDailyTrades,
     recentTrades: recentTrades.length,
     winRate: recentTrades.length ? (wins.length / recentTrades.length) * 100 : null,
-    profitFactor: grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 10 : null,
-    recentPnlUsdt: recentTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0),
+    profitFactor,
+    recentPnlUsdt,
+    healthLevel: performanceGuard.level,
+    healthReason: performanceGuard.reason,
+    autoPauseRecommended: performanceGuard.autoPauseRecommended,
     openTrade,
   };
+}
+
+function pullbackPerformanceGuard(
+  pnls: number[],
+  profitFactor: number | null,
+  recentPnlUsdt: number,
+): { level: "LEARNING" | "HEALTHY" | "WATCH" | "DANGER"; reason: string; autoPauseRecommended: boolean } {
+  const newestFirst = pnls.filter((value) => Number.isFinite(value));
+  if (newestFirst.length < 5) {
+    return { level: "LEARNING", reason: `Need ${5 - newestFirst.length} more closed pullback trades for a reliable read.`, autoPauseRecommended: false };
+  }
+  const lossStreak = newestFirst.findIndex((pnl) => pnl >= 0);
+  const consecutiveLosses = lossStreak === -1 ? newestFirst.length : lossStreak;
+  if (consecutiveLosses >= 3) {
+    return { level: "DANGER", reason: `${consecutiveLosses} losses in a row. Auto-pause guard will block new entries.`, autoPauseRecommended: true };
+  }
+  if (newestFirst.length >= 10 && (profitFactor ?? 0) < 0.9 && recentPnlUsdt < 0) {
+    return { level: "DANGER", reason: `Recent PF ${(profitFactor ?? 0).toFixed(2)} and PnL ${recentPnlUsdt.toFixed(2)} USDT. Auto-pause recommended.`, autoPauseRecommended: true };
+  }
+  if ((profitFactor ?? 0) < 1 || recentPnlUsdt < 0) {
+    return { level: "WATCH", reason: `Performance is soft: PF ${profitFactor == null ? "n/a" : profitFactor.toFixed(2)}, PnL ${recentPnlUsdt.toFixed(2)} USDT.`, autoPauseRecommended: false };
+  }
+  return { level: "HEALTHY", reason: `Performance guard OK: PF ${profitFactor == null ? "n/a" : profitFactor.toFixed(2)}, PnL ${recentPnlUsdt.toFixed(2)} USDT.`, autoPauseRecommended: false };
 }
 
 function pullbackReason(input: {

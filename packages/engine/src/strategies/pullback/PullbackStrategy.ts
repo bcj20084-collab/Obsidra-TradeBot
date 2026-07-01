@@ -43,7 +43,7 @@ export class PullbackStrategy extends BaseStrategy {
         prisma.trade.findMany({
           where: { strategyId: this.config.id, status: "CLOSED" },
           orderBy: { closedAt: "desc" },
-          take: 3,
+          take: 20,
           select: { pnlUsdt: true },
         }),
       ]);
@@ -51,10 +51,11 @@ export class PullbackStrategy extends BaseStrategy {
         operatorLog("INFO", `PULLBACK WAIT | ${this.config.symbol}`, `Daily cap reached: ${dailyTrades}/${params.maxDailyTrades}`);
         return;
       }
-      if (recentClosed.length === 3 && recentClosed.every((trade) => (trade.pnlUsdt ?? 0) < 0)) {
+      const circuitBreaker = pullbackCircuitBreaker(recentClosed.map((trade) => trade.pnlUsdt ?? 0));
+      if (circuitBreaker.pause) {
         this.pause();
-        log.warn({ strategyId: this.config.id, symbol: this.config.symbol }, "pullback circuit breaker opened after three losses");
-        operatorLog("WARNING", `PULLBACK PAUSED | ${this.config.symbol}`, "Three closed losses in a row. Strategy paused for safety.");
+        log.warn({ strategyId: this.config.id, symbol: this.config.symbol, reason: circuitBreaker.reason }, "pullback circuit breaker opened");
+        operatorLog("WARNING", `PULLBACK PAUSED | ${this.config.symbol}`, circuitBreaker.reason);
         return;
       }
 
@@ -177,4 +178,25 @@ function averageTrueRange(candles: Candle[]): number {
     return Math.max(candle.high - candle.low, Math.abs(candle.high - previous.close), Math.abs(candle.low - previous.close));
   });
   return ranges.reduce((sum, value) => sum + value, 0) / ranges.length;
+}
+
+function pullbackCircuitBreaker(pnls: number[]): { pause: boolean; reason: string } {
+  const newestFirst = pnls.filter((value) => Number.isFinite(value));
+  const lossStreak = newestFirst.findIndex((pnl) => pnl >= 0);
+  const consecutiveLosses = lossStreak === -1 ? newestFirst.length : lossStreak;
+  if (consecutiveLosses >= 3) {
+    return { pause: true, reason: `Three closed DOGE pullback losses in a row (${consecutiveLosses}). Strategy paused for safety.` };
+  }
+  if (newestFirst.length >= 10) {
+    const wins = newestFirst.filter((pnl) => pnl > 0);
+    const losses = newestFirst.filter((pnl) => pnl < 0);
+    const grossWins = wins.reduce((sum, pnl) => sum + pnl, 0);
+    const grossLosses = Math.abs(losses.reduce((sum, pnl) => sum + pnl, 0));
+    const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? 10 : 0;
+    const totalPnl = newestFirst.reduce((sum, pnl) => sum + pnl, 0);
+    if (profitFactor < 0.9 && totalPnl < 0) {
+      return { pause: true, reason: `DOGE pullback PF ${profitFactor.toFixed(2)} with ${totalPnl.toFixed(2)} USDT recent PnL. Strategy paused for review.` };
+    }
+  }
+  return { pause: false, reason: "DOGE pullback performance is acceptable." };
 }

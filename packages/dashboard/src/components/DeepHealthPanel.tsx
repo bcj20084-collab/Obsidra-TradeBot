@@ -197,14 +197,16 @@ function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pul
   const ready = control.status === "SETUP_READY";
   const open = control.openTrade;
   return (
-    <div className={`mt-4 rounded-3xl border p-5 ${ready ? "border-emerald-400/30 bg-emerald-400/10" : "border-cyan/15 bg-cyan/5"}`}>
+    <div className={`mt-4 rounded-3xl border p-5 ${pullbackHealthClass(control.healthLevel, ready)}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="label">DOGE Pullback Control Center</div>
           <div className="mt-1 text-xl font-black text-white">{control.symbol} {control.timeframe === "240" ? "4H" : `${control.timeframe}m`} / {control.exchange}</div>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{control.reason}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">{control.healthReason}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <span className={`pill ${control.healthLevel === "HEALTHY" ? "pill-success" : control.healthLevel === "DANGER" ? "pill-danger" : ""}`}>{control.healthLevel}</span>
           <span className={ready ? "pill pill-success" : "pill"}>{control.direction}</span>
           <span className="pill">{control.mode}</span>
         </div>
@@ -230,6 +232,12 @@ function PullbackControlCard({ control }: { control: NonNullable<DeepHealth["pul
         <Mini label="Profit factor" value={control.profitFactor == null ? "—" : control.profitFactor.toFixed(2)} />
         <Mini label="Recent PnL" value={`${formatSigned(control.recentPnlUsdt)} USDT`} />
       </div>
+
+      {control.autoPauseRecommended ? (
+        <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-bold text-rose-100">
+          Auto-pause recommended/active: do not scale this strategy until paper performance recovers.
+        </div>
+      ) : null}
 
       {open ? (
         <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-slate-300">
@@ -411,6 +419,13 @@ function tunerClass(mode: string) {
   if (mode === "CAUTIOUS") return "border-amber-400/30 bg-amber-400/10";
   if (mode === "WATCH") return "border-emerald-400/30 bg-emerald-400/10";
   return "border-cyan/15 bg-cyan/5";
+}
+
+function pullbackHealthClass(level: string, ready: boolean) {
+  if (level === "DANGER") return "border-rose-500/35 bg-rose-500/10";
+  if (level === "WATCH") return "border-amber-400/30 bg-amber-400/10";
+  if (level === "HEALTHY") return "border-emerald-400/30 bg-emerald-400/10";
+  return ready ? "border-emerald-400/30 bg-emerald-400/10" : "border-cyan/15 bg-cyan/5";
 }
 
 function distancePct(current: number | null | undefined, target: number | null | undefined): string {
