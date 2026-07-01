@@ -10,7 +10,7 @@ import type { MarketDataStore } from "../data/MarketDataStore.js";
 import type { OrderManager } from "../execution/OrderManager.js";
 import type { ExecutionJournal } from "../execution/ExecutionJournal.js";
 import type { RiskEngine } from "../risk/RiskEngine.js";
-import type { Direction } from "@obsidra/shared";
+import type { Direction, SignalResult } from "@obsidra/shared";
 import type { ExchangeId } from "../exchanges/IExchangeAdapter.js";
 
 export interface StrategyDependencies {
@@ -24,6 +24,8 @@ export interface StrategyDependencies {
   unregisterOpen(config: StrategyConfig, symbol?: string): void;
   onTrendCandle?(symbol: string, exchange: ExchangeId): Promise<void>;
   watchTradeClose?(tradeId: string, exchange: ExchangeId, symbol: string, strategyId: string): Promise<void>;
+  notifyTradeOpened?(symbol: string, signal: SignalResult, size: number, leverage: number): Promise<void>;
+  notifyAlert?(title: string, details: string, dedupeKey: string): Promise<void>;
 }
 
 export function createStrategy(config: StrategyConfig, dependencies: StrategyDependencies): IStrategy {

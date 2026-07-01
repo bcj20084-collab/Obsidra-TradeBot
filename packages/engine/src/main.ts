@@ -275,6 +275,8 @@ const strategies = activeDescriptors.map((descriptor) => createStrategy({
   },
   onTrendCandle: (symbol, exchange) => evaluate(exchange, symbol),
   watchTradeClose,
+  notifyTradeOpened: (symbol, signal, size, leverage) => telegram.tradeOpened(symbol, signal, size, leverage),
+  notifyAlert: (title, details, dedupeKey) => telegram.alert(title, details, dedupeKey),
 }));
 
 async function bootstrap(): Promise<void> {

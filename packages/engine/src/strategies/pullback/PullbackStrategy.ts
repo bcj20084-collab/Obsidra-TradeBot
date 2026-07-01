@@ -35,6 +35,19 @@ export class PullbackStrategy extends BaseStrategy {
       const signal = this.evaluate(candles, params);
       this.lastSignalCandleOpenTime = candle.openTime;
       if (!signal) return;
+      await this.dependencies.notifyAlert?.(
+        `SETUP READY | ${this.config.symbol}`,
+        [
+          `Strategy: DOGE 4H Pullback`,
+          `Direction: ${signal.direction}`,
+          `Edge score: ${signal.score}/100`,
+          `RSI: ${Number(signal.indicators.rsi ?? 0).toFixed(1)}`,
+          `Entry: $${signal.entryPrice.toFixed(6)}`,
+          `SL: $${signal.stopLoss.toFixed(6)}`,
+          `TP: $${signal.takeProfit.toFixed(6)}`,
+        ].join(" | "),
+        `pullback-setup:${this.config.symbol}:${candle.openTime}:${signal.direction}`,
+      );
 
       const day = new Date();
       day.setUTCHours(0, 0, 0, 0);
@@ -74,6 +87,7 @@ export class PullbackStrategy extends BaseStrategy {
       const tradeId = await this.dependencies.orderManager.execute(this.config.symbol, signal, risk, this.config.exchange, this.config.id);
       this.dependencies.registerOpen(this.config, signal.direction, risk.positionSizeUsdt);
       void this.dependencies.watchTradeClose?.(tradeId, this.config.exchange, this.config.symbol, this.config.id);
+      await this.dependencies.notifyTradeOpened?.(this.config.symbol, signal, risk.positionSizeUsdt, risk.leverage);
       operatorLog(
         "INFO",
         `PULLBACK TRADE | ${this.config.symbol} | ${signal.direction}`,
