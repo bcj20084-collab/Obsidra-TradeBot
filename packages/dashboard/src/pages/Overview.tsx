@@ -48,10 +48,10 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
             <div>
               <div className="label">Portfolio intelligence</div>
               <h2 className="mt-3 max-w-3xl text-4xl font-black tracking-tight text-white md:text-5xl">
-                Paper trading cockpit for Binance market flow.
+                Premium paper-trading OS for strategy research and live intelligence.
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
-                Obsidra is scanning BTCUSDT and ETHUSDT, running risk checks, and simulating entries before real exchange execution is enabled.
+                Obsidra is running protected paper execution, DOGE 4H pullback intelligence, forward-test reality match, and risk checks before any real-money mode is considered.
               </p>
             </div>
             <div className={`hero-pnl ${pnlPositive ? "text-emerald-300" : "text-rose-300"}`}>
@@ -85,11 +85,18 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
         </div>
       </section>
 
+      <section className="grid gap-3 md:grid-cols-4">
+        <ModuleTile label="1. Signal" value="DOGE 4H Pullback" detail="EMA/RSI/ATR edge check" />
+        <ModuleTile label="2. Risk" value="Guarded Paper" detail="Portfolio + loss cooldown" />
+        <ModuleTile label="3. Execution" value="Strategy Timeout" detail="72 candles / 288h max hold" />
+        <ModuleTile label="4. Learning" value="Reality Match" detail="Backtest vs paper behavior" />
+      </section>
+
+      <DeepHealthPanel />
+
       <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
 
       <MetricsCards metrics={metrics} />
-
-      <DeepHealthPanel />
 
       <SafetySupervisor status={metrics.safetySupervisor} />
 
@@ -191,6 +198,16 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
       <div className="label">{label}</div>
       <div className="mt-2 font-mono text-lg font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function ModuleTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="glass-card p-4">
+      <div className="label">{label}</div>
+      <div className="mt-2 text-lg font-black text-white">{value}</div>
+      <div className="mt-1 text-sm text-slate-500">{detail}</div>
     </div>
   );
 }

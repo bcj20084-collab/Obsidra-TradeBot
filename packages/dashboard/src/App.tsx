@@ -12,7 +12,7 @@ import {
   Sparkles,
   Workflow,
 } from "lucide-react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LogoMark } from "./components/LogoMark";
 import { hasSession, login, trpc } from "./lib/api";
 import type { Metrics, SignalFeedItem, Trade } from "./lib/types";
@@ -42,17 +42,38 @@ const emptyMetrics: Metrics = {
   adaptiveConfig: {},
 };
 
-const navItems = [
-  ["/", "Cockpit", Gauge],
-  ["/trades", "Trades", CandlestickChart],
-  ["/strategy", "Signal Lab", Activity],
-  ["/strategies", "Strategies", Workflow],
-  ["/backtest", "Backtest", FlaskConical],
-  ["/symbols", "Symbols", Layers3],
-  ["/settings", "Control", SettingsIcon],
+const navGroups = [
+  {
+    title: "Command",
+    items: [
+      { to: "/", label: "Mission Control", description: "Live cockpit", icon: Gauge },
+      { to: "/trades", label: "Trade Tape", description: "Entries, exits, replay", icon: CandlestickChart },
+      { to: "/settings", label: "Control Room", description: "Safety switches", icon: SettingsIcon },
+    ],
+  },
+  {
+    title: "Intelligence",
+    items: [
+      { to: "/strategy", label: "Signal Lab", description: "Signal diagnostics", icon: Activity },
+      { to: "/strategies", label: "Strategy OS", description: "Active modules", icon: Workflow },
+      { to: "/backtest", label: "Optimizer", description: "Backtest lab", icon: FlaskConical },
+      { to: "/symbols", label: "Markets", description: "Universe scanner", icon: Layers3 },
+    ],
+  },
 ] as const;
 
+const routeMeta = {
+  "/": { label: "Mission Control", eyebrow: "Premium command surface", detail: "Live paper execution, DOGE pullback intelligence and risk radar." },
+  "/trades": { label: "Trade Tape", eyebrow: "Execution archive", detail: "Review fills, PnL, replay and lifecycle events." },
+  "/strategy": { label: "Signal Lab", eyebrow: "Signal intelligence", detail: "Inspect signal quality, rejects and market diagnostics." },
+  "/strategies": { label: "Strategy OS", eyebrow: "Automation layer", detail: "Active strategies, configuration and operating posture." },
+  "/backtest": { label: "Optimizer", eyebrow: "Research lab", detail: "Backtest strategy ideas before paper deployment." },
+  "/symbols": { label: "Markets", eyebrow: "Market universe", detail: "Track available symbols and market readiness." },
+  "/settings": { label: "Control Room", eyebrow: "Operator controls", detail: "Safety controls, sessions and runtime operations." },
+} as const;
+
 export default function App() {
+  const location = useLocation();
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -95,6 +116,7 @@ export default function App() {
     const mode = "Paper / Binance market data";
     return { status, healthy, mode };
   }, [metrics.botStatus]);
+  const page = routeMeta[(location.pathname as keyof typeof routeMeta)] ?? routeMeta["/"];
 
   if (authenticated === null) {
     return (
@@ -110,7 +132,7 @@ export default function App() {
   if (!authenticated) return <Login onSuccess={() => setAuthenticated(true)} />;
 
   return (
-    <div className="app-shell min-h-screen xl:grid xl:grid-cols-[304px_1fr]">
+    <div className="app-shell min-h-screen xl:grid xl:grid-cols-[328px_1fr]">
       <aside className="premium-sidebar sticky top-0 z-20 border-b border-white/10 p-4 backdrop-blur-xl xl:h-screen xl:border-b-0 xl:border-r xl:p-6">
         <div className="flex items-center justify-between gap-3 xl:block">
           <div className="brand-card flex items-center gap-3">
@@ -126,23 +148,32 @@ export default function App() {
           </div>
         </div>
 
-        <div className="sidebar-section-title mt-6 hidden xl:block">Navigation</div>
-        <nav className="mt-5 flex gap-2 overflow-x-auto pb-1 xl:mt-3 xl:flex-col xl:overflow-visible xl:pb-0">
-          {navItems.map(([to, label, Icon]) => (
-            <NavLink
-              className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
-              end={to === "/"}
-              key={to}
-              to={to}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
+        <nav className="mt-5 flex gap-2 overflow-x-auto pb-1 xl:mt-7 xl:flex-col xl:gap-5 xl:overflow-visible xl:pb-0">
+          {navGroups.map((group) => (
+            <div className="sidebar-nav-group" key={group.title}>
+              <div className="sidebar-section-title hidden xl:block">{group.title}</div>
+              <div className="mt-2 flex gap-2 xl:flex-col">
+                {group.items.map(({ to, label, description, icon: Icon }) => (
+                  <NavLink
+                    className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
+                    end={to === "/"}
+                    key={to}
+                    to={to}
+                  >
+                    <Icon size={18} />
+                    <span className="min-w-0">
+                      <span className="block truncate">{label}</span>
+                      <span className="nav-item-desc hidden xl:block">{description}</span>
+                    </span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
         <div className="mt-7 hidden space-y-4 xl:block">
-          <div className="sidebar-section-title">System</div>
+          <div className="sidebar-section-title">System stack</div>
           <div className="sidebar-card">
             <div className="label">Runtime mode</div>
             <div className="mt-3 text-lg font-bold text-white">{runtime.mode}</div>
@@ -155,18 +186,28 @@ export default function App() {
             <div className="mt-4 space-y-3 text-sm">
               <CheckRow text="Paper execution enabled" />
               <CheckRow text="Risk gate active" />
-              <CheckRow text="Telegram connected" />
+              <CheckRow text="DOGE 4H pullback guarded" />
+              <CheckRow text="Forward-test reality match" />
+            </div>
+          </div>
+          <div className="sidebar-card">
+            <div className="label">Session telemetry</div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <SideMetric label="Trades" value={String(metrics.totalTrades)} />
+              <SideMetric label="24h" value={String(metrics.tradesLast24h)} />
+              <SideMetric label="PF" value={metrics.profitFactor.toFixed(2)} />
+              <SideMetric label="WR" value={`${metrics.winRate.toFixed(0)}%`} />
             </div>
           </div>
         </div>
       </aside>
 
       <main className="dashboard-main p-4 sm:p-6 lg:p-8">
-        <div className="premium-topbar mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="premium-topbar mb-6 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
           <div>
-            <div className="label">Command surface</div>
+            <div className="label">{page.eyebrow}</div>
             <div className="mt-1 flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-black tracking-tight">Trading cockpit</h1>
+              <h1 className="text-3xl font-black tracking-tight">{page.label}</h1>
               <span className={`pill ${connectionError ? "pill-danger" : "pill-success"}`}>
                 {connectionError ? "Degraded" : "Connected"}
               </span>
@@ -174,13 +215,19 @@ export default function App() {
               <span className="pill">Dark terminal</span>
             </div>
             <p className={`mt-2 text-sm ${connectionError ? "text-rose-300" : "text-slate-400"}`}>
-              {connectionError || `Last sync ${lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : "pending"} | Binance demo market feed`}
+              {connectionError || `${page.detail} Last sync ${lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : "pending"} | Binance demo market feed`}
             </p>
           </div>
-          <button className="button glow-button flex items-center justify-center gap-2" disabled={refreshing} onClick={() => void refresh()}>
-            <RefreshCw className={refreshing ? "animate-spin" : ""} size={16} />
-            Refresh
-          </button>
+          <div className="topbar-actions">
+            <div className="command-chip">
+              <span className="command-chip-dot" />
+              DOGE Pullback OS
+            </div>
+            <button className="button glow-button flex items-center justify-center gap-2" disabled={refreshing} onClick={() => void refresh()}>
+              <RefreshCw className={refreshing ? "animate-spin" : ""} size={16} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <Suspense fallback={<div className="empty-state">Loading premium module...</div>}>
@@ -205,6 +252,15 @@ function CheckRow({ text }: { text: string }) {
     <div className="flex items-center gap-2 text-slate-300">
       <ShieldCheck className="text-emerald-400" size={16} />
       {text}
+    </div>
+  );
+}
+
+function SideMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+      <div className="text-[0.6rem] font-black uppercase tracking-[0.18em] text-slate-600">{label}</div>
+      <div className="mt-1 truncate font-mono text-sm font-black text-white">{value}</div>
     </div>
   );
 }

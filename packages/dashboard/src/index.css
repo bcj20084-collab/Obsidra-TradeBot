@@ -25,7 +25,7 @@ body {
     radial-gradient(circle at 10% -10%, rgba(80, 227, 194, 0.14), transparent 34rem),
     radial-gradient(circle at 88% 0%, rgba(114, 92, 255, 0.13), transparent 34rem),
     radial-gradient(circle at 50% 120%, rgba(255, 174, 66, 0.07), transparent 32rem),
-    linear-gradient(135deg, #03050a 0%, #070a12 48%, #03050a 100%);
+    linear-gradient(135deg, #010208 0%, #050812 46%, #010208 100%);
 }
 
 body::before {
@@ -101,9 +101,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
   .premium-sidebar {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.022)),
-      radial-gradient(circle at 0% 0%, rgba(80,227,194,.13), transparent 16rem),
-      rgba(3,5,10,.84);
+      linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.018)),
+      radial-gradient(circle at 0% 0%, rgba(80,227,194,.15), transparent 17rem),
+      radial-gradient(circle at 90% 35%, rgba(124,92,255,.10), transparent 18rem),
+      rgba(1,2,8,.92);
     box-shadow: inset -1px 0 0 rgba(255,255,255,.05);
   }
 
@@ -114,6 +115,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
   .sidebar-section-title {
     @apply text-[0.65rem] font-black uppercase tracking-[0.22em] text-slate-600;
+  }
+
+  .sidebar-nav-group {
+    @apply shrink-0 xl:shrink;
   }
 
   .sidebar-card {
@@ -134,11 +139,33 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   }
 
   .nav-item {
-    @apply flex min-w-fit items-center gap-3 rounded-2xl border border-transparent px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-white/10 hover:bg-white/[0.055] hover:text-white;
+    @apply flex min-w-fit items-center gap-3 rounded-2xl border border-transparent px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-white/10 hover:bg-white/[0.055] hover:text-white xl:min-w-0;
   }
 
   .nav-item-active {
     @apply border border-cyan/25 bg-cyan/10 text-cyan shadow-glow;
+  }
+
+  .nav-item-desc {
+    @apply mt-0.5 truncate text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600;
+  }
+
+  .nav-item-active .nav-item-desc {
+    @apply text-cyan/70;
+  }
+
+  .topbar-actions {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
+  .command-chip {
+    @apply inline-flex items-center gap-2 rounded-2xl border border-cyan/20 bg-cyan/10 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-cyan;
+    box-shadow: 0 0 28px rgba(80,227,194,.10);
+  }
+
+  .command-chip-dot {
+    @apply h-2 w-2 rounded-full bg-emerald-400;
+    box-shadow: 0 0 18px rgba(52,211,153,.9);
   }
 
   .status-dot {
