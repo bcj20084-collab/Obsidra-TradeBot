@@ -838,6 +838,55 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
       rgba(255,255,255,.04);
   }
 
+  .market-hero {
+    @apply relative overflow-hidden p-6 md:p-8;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(80,227,194,.16), transparent 24rem),
+      radial-gradient(circle at 92% 0%, rgba(214,178,106,.12), transparent 24rem),
+      linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.02)),
+      rgba(255,255,255,.04);
+  }
+
+  .market-best-grid {
+    @apply grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)];
+  }
+
+  .market-best-card {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(214,178,106,.12), transparent 22rem),
+      radial-gradient(circle at 100% 15%, rgba(80,227,194,.10), transparent 20rem),
+      rgba(255,255,255,.04);
+  }
+
+  .market-radar-card {
+    background:
+      radial-gradient(circle at 100% 0%, rgba(124,92,255,.13), transparent 18rem),
+      rgba(255,255,255,.04);
+  }
+
+  .market-filter-bar {
+    @apply grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(130px,176px)_minmax(160px,210px)] md:items-center;
+  }
+
+  .market-grid {
+    @apply grid gap-4 xl:grid-cols-2;
+  }
+
+  .market-card {
+    @apply relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 shadow-glow backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/[0.045];
+    min-width: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.075), 0 24px 80px rgba(0,0,0,.36);
+  }
+
+  .market-card::before {
+    @apply pointer-events-none absolute inset-x-0 top-0 h-px content-[''];
+    background: linear-gradient(90deg, transparent, rgba(80,227,194,.55), rgba(214,178,106,.45), transparent);
+  }
+
+  .market-card-good { border-color: rgba(52,211,153,.18); }
+  .market-card-warn { border-color: rgba(251,191,36,.18); }
+  .market-card-bad { border-color: rgba(251,113,133,.14); }
+
   .trade-timeline {
     @apply relative space-y-4 pl-6;
   }
