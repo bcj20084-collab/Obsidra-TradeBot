@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  BrainCircuit,
   CandlestickChart,
   Cpu,
   FlaskConical,
@@ -21,6 +22,7 @@ import type { Metrics, SignalFeedItem, Trade } from "./lib/types";
 
 const Overview = lazy(() => import("./pages/Overview").then((module) => ({ default: module.Overview })));
 const Trades = lazy(() => import("./pages/Trades").then((module) => ({ default: module.Trades })));
+const AiBrain = lazy(() => import("./pages/AiBrain").then((module) => ({ default: module.AiBrain })));
 const Strategy = lazy(() => import("./pages/Strategy").then((module) => ({ default: module.Strategy })));
 const Strategies = lazy(() => import("./pages/Strategies").then((module) => ({ default: module.Strategies })));
 const Backtest = lazy(() => import("./pages/Backtest").then((module) => ({ default: module.Backtest })));
@@ -179,6 +181,7 @@ const navGroups = [
   {
     title: "Intelligence",
     items: [
+      { to: "/ai-brain", label: "AI Brain", description: "Learning, health, no-trade reasons", icon: BrainCircuit },
       { to: "/strategy", label: "Signal Lab", description: "Signal diagnostics", icon: Activity },
       { to: "/strategies", label: "Strategy OS", description: "Active modules", icon: Workflow },
       { to: "/backtest", label: "Optimizer", description: "Backtest lab", icon: FlaskConical },
@@ -190,6 +193,7 @@ const navGroups = [
 const routeMeta = {
   "/": { label: "Mission Control", eyebrow: "Premium command surface", detail: "Live paper execution, DOGE pullback intelligence and risk radar." },
   "/trades": { label: "Trade Tape", eyebrow: "Execution archive", detail: "Review fills, PnL, replay and lifecycle events." },
+  "/ai-brain": { label: "AI Brain", eyebrow: "Learning core", detail: "Loss brain, health score, no-trade reasons and adaptive intelligence." },
   "/strategy": { label: "Signal Lab", eyebrow: "Signal intelligence", detail: "Inspect signal quality, rejects and market diagnostics." },
   "/strategies": { label: "Strategy OS", eyebrow: "Automation layer", detail: "Active strategies, configuration and operating posture." },
   "/backtest": { label: "Optimizer", eyebrow: "Research lab", detail: "Backtest strategy ideas before paper deployment." },
@@ -265,6 +269,7 @@ export default function App() {
   const navBadge = (to: string): string | null => {
     if (to === "/") return metrics.botStatus === "RUNNING" ? "LIVE" : metrics.botStatus;
     if (to === "/trades") return openTradeCount ? String(openTradeCount) : String(metrics.tradesLast24h);
+    if (to === "/ai-brain") return metrics.safetySupervisor?.level ?? "AI";
     if (to === "/strategy") return signals.length ? String(signals.length) : null;
     if (to === "/strategies") return "OS";
     if (to === "/backtest") return "LAB";
@@ -411,6 +416,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Overview metrics={metrics} trades={trades} signals={signals} />} />
             <Route path="/trades" element={<Trades trades={trades} />} />
+            <Route path="/ai-brain" element={<AiBrain metrics={metrics} trades={trades} signals={signals} />} />
             <Route path="/strategy" element={<Strategy metrics={metrics} />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/backtest" element={<Backtest />} />

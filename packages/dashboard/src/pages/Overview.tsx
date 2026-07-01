@@ -1,21 +1,14 @@
 import { useState } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bot, BrainCircuit, CandlestickChart, CheckCircle2, Radar, Shield, Sparkles, Target, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { Metrics, ReplayCandle, SignalFeedItem, Trade, TradeDetail } from "../lib/types";
-import { DeepHealthPanel } from "../components/DeepHealthPanel";
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
 import { ObsidraCommandCenter } from "../components/ObsidraCommandCenter";
-import { PremiumIntelligence } from "../components/PremiumIntelligence";
-import { SafetySupervisor } from "../components/SafetySupervisor";
-import { SignalDiagnostics } from "../components/SignalDiagnostics";
 import { SignalFeed } from "../components/SignalFeed";
-import { StrategyOptimizerCenter } from "../components/StrategyOptimizerCenter";
-import { SystemDeployCenter } from "../components/SystemDeployCenter";
-import { TopBotParity } from "../components/TopBotParity";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
 import { trpc } from "../lib/api";
-import { AiActivityCommand } from "../components/AiActivityCommand";
 
 export function Overview({ metrics, trades, signals }: { metrics: Metrics; trades: Trade[]; signals: SignalFeedItem[] }) {
   const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
@@ -127,8 +120,8 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
         </div>
 
         <div className="glass-card premium-vault-card">
-          <div className="label">Premium feel</div>
-          <h3 className="mt-2 text-2xl font-black">Dark, clean, boss-level.</h3>
+          <div className="label">AI Brain separated</div>
+          <h3 className="mt-2 text-2xl font-black">Debug-ul greu stă într-o pagină separată.</h3>
           <p className="mt-3 text-sm leading-6 text-slate-400">
             Layout-ul e gândit să vezi imediat ce contează: status, risc, strategie, execuții și ce învață bot-ul.
           </p>
@@ -137,6 +130,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
             <VaultItem text="Trade replay când apeși pe trade" />
             <VaultItem text="Control center pentru strategia activă" />
           </div>
+          <Link className="button glow-button mt-5 inline-flex items-center justify-center" to="/ai-brain">Open AI Brain</Link>
         </div>
       </section>
 
@@ -201,40 +195,6 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
       </section>
 
       <SignalFeed items={signals} />
-
-      <section className="dashboard-accordion-stack">
-        <details className="dashboard-accordion">
-          <summary>
-            <span>
-              <span className="label">AI activity</span>
-              <strong>Bot intelligence & safety</strong>
-            </span>
-            <span className="pill">premium panel</span>
-          </summary>
-          <div className="dashboard-accordion-body">
-            <AiActivityCommand metrics={metrics} trades={trades} signals={signals} />
-            <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
-            <SafetySupervisor status={metrics.safetySupervisor} />
-            <SignalDiagnostics signals={signals} />
-          </div>
-        </details>
-
-        <details className="dashboard-accordion">
-          <summary>
-            <span>
-              <span className="label">System layer</span>
-              <strong>Deploy, health & optimizer</strong>
-            </span>
-            <span className="pill">advanced</span>
-          </summary>
-          <div className="dashboard-accordion-body">
-            <SystemDeployCenter />
-            <DeepHealthPanel />
-            <StrategyOptimizerCenter metrics={metrics} trades={trades} />
-            <TopBotParity />
-          </div>
-        </details>
-      </section>
 
       <TradeReplayPanel trade={selectedTrade} candles={replayCandles} loading={loadingReplay} onClose={() => setSelectedTrade(null)} />
     </div>

@@ -7,15 +7,29 @@ import { trpc } from "../lib/api";
 
 export function Trades({ trades }: { trades: Trade[] }) {
   const [direction, setDirection] = useState("ALL");
+  const [status, setStatus] = useState("ALL");
+  const [outcome, setOutcome] = useState("ALL");
+  const [range, setRange] = useState("ALL");
   const [query, setQuery] = useState("");
   const [selectedTrade, setSelectedTrade] = useState<TradeDetail | null>(null);
   const [replayCandles, setReplayCandles] = useState<ReplayCandle[]>([]);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const filtered = useMemo(() => trades.filter((trade) => {
     const directionMatch = direction === "ALL" || trade.direction === direction;
+    const statusMatch = status === "ALL" || trade.status === status;
+    const outcomeMatch =
+      outcome === "ALL" ||
+      (outcome === "WIN" && (trade.pnlUsdt ?? 0) > 0) ||
+      (outcome === "LOSS" && (trade.pnlUsdt ?? 0) < 0) ||
+      (outcome === "OPEN" && ["OPEN", "FILLED", "CLOSING"].includes(trade.status));
+    const ageMs = Date.now() - new Date(trade.createdAt).getTime();
+    const rangeMatch =
+      range === "ALL" ||
+      (range === "24H" && ageMs <= 86_400_000) ||
+      (range === "7D" && ageMs <= 7 * 86_400_000);
     const queryMatch = !query || `${trade.symbol} ${trade.exchange} ${trade.strategyId} ${trade.status}`.toLowerCase().includes(query.toLowerCase());
-    return directionMatch && queryMatch;
-  }), [trades, direction, query]);
+    return directionMatch && statusMatch && outcomeMatch && rangeMatch && queryMatch;
+  }), [trades, direction, status, outcome, range, query]);
   const closed = trades.filter((trade) => trade.status === "CLOSED");
   const open = trades.filter((trade) => ["OPEN", "FILLED", "CLOSING"].includes(trade.status));
   const pnl = trades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
@@ -77,7 +91,7 @@ export function Trades({ trades }: { trades: Trade[] }) {
         </div>
       </section>
 
-      <div className="glass-card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="glass-card trade-filter-bar">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
           <input className="input pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search symbol, exchange, strategy, status..." />
@@ -86,6 +100,24 @@ export function Trades({ trades }: { trades: Trade[] }) {
           <option>ALL</option>
           <option>LONG</option>
           <option>SHORT</option>
+        </select>
+        <select className="input md:w-44" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option>ALL</option>
+          <option>OPEN</option>
+          <option>FILLED</option>
+          <option>CLOSING</option>
+          <option>CLOSED</option>
+        </select>
+        <select className="input md:w-44" value={outcome} onChange={(event) => setOutcome(event.target.value)}>
+          <option>ALL</option>
+          <option>WIN</option>
+          <option>LOSS</option>
+          <option>OPEN</option>
+        </select>
+        <select className="input md:w-44" value={range} onChange={(event) => setRange(event.target.value)}>
+          <option>ALL</option>
+          <option>24H</option>
+          <option>7D</option>
         </select>
       </div>
 

@@ -793,6 +793,51 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     @apply rounded-[2rem] border border-white/10 bg-black/25 p-5 shadow-glow;
   }
 
+  .trade-filter-bar {
+    @apply grid gap-3 md:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(130px,176px))] md:items-center;
+  }
+
+  .ai-brain-hero {
+    @apply relative overflow-hidden p-6 md:p-8;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(214,178,106,.16), transparent 24rem),
+      radial-gradient(circle at 88% 0%, rgba(80,227,194,.14), transparent 24rem),
+      linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.02)),
+      rgba(255,255,255,.04);
+  }
+
+  .ai-brain-grid {
+    @apply grid gap-5 2xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)];
+  }
+
+  .ai-score-orb {
+    @apply grid h-32 w-32 shrink-0 place-items-center rounded-[2rem] border bg-black/30 text-center shadow-glow;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 0 54px rgba(214,178,106,.10);
+  }
+
+  .ai-score-orb span {
+    @apply font-mono text-4xl font-black leading-none text-white;
+  }
+
+  .ai-score-orb small {
+    @apply -mt-7 text-[0.62rem] font-black uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .ai-score-good { @apply border-emerald-400/25; background: radial-gradient(circle, rgba(52,211,153,.16), rgba(0,0,0,.28)); }
+  .ai-score-warn { @apply border-amber-300/25; background: radial-gradient(circle, rgba(251,191,36,.15), rgba(0,0,0,.28)); }
+  .ai-score-bad { @apply border-rose-400/25; background: radial-gradient(circle, rgba(251,113,133,.15), rgba(0,0,0,.28)); }
+
+  .brain-stat {
+    @apply min-w-0 rounded-[1.7rem] border border-white/10 bg-black/25 p-4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+  }
+
+  .no-trade-panel {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(251,191,36,.12), transparent 20rem),
+      rgba(255,255,255,.04);
+  }
+
   .trade-timeline {
     @apply relative space-y-4 pl-6;
   }
