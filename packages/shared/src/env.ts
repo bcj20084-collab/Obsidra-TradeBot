@@ -5,6 +5,7 @@ const boolString = z
   .transform((value) => value === "true");
 
 const optionalUrl = z.union([z.literal(""), z.string().url()]).default("");
+const developmentMasterSecret = "development-only-master-secret-32";
 
 export const envSchema = z
   .object({
@@ -59,7 +60,7 @@ export const envSchema = z
     DASHBOARD_PASSWORD: z.string().default(""),
     DASHBOARD_PASSWORD_HASH: z.string().default(""),
     JWT_SECRET: z.string().min(32),
-    MASTER_SECRET: z.string().min(32).default("development-only-master-secret-32"),
+    MASTER_SECRET: z.string().min(32).default(developmentMasterSecret),
     ALLOWED_IPS: z.string().default(""),
     STRATEGY_TREND_ENABLED: boolString.default(true),
     STRATEGY_PULLBACK_ENABLED: boolString.default(true),
@@ -123,6 +124,13 @@ export const envSchema = z
         code: "custom",
         message: "Set DASHBOARD_PASSWORD_HASH or DASHBOARD_PASSWORD",
         path: ["DASHBOARD_PASSWORD_HASH"],
+      });
+    }
+    if (env.NODE_ENV === "production" && env.MASTER_SECRET === developmentMasterSecret) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Set an explicit production MASTER_SECRET; the development fallback is not allowed",
+        path: ["MASTER_SECRET"],
       });
     }
     if (env.GRID_LOWER_PRICE >= env.GRID_UPPER_PRICE) {

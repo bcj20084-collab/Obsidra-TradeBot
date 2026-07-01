@@ -45,4 +45,26 @@ describe("live trading environment gate", () => {
       BYBIT_DEMO: "true",
     })).toThrow(/cannot both be true/);
   });
+
+  it("allows the development MASTER_SECRET fallback outside production", () => {
+    const { MASTER_SECRET: _masterSecret, ...withoutMasterSecret } = base;
+    const env = envSchema.parse(withoutMasterSecret);
+    expect(env.MASTER_SECRET).toBe("development-only-master-secret-32");
+  });
+
+  it("rejects the development MASTER_SECRET fallback in production", () => {
+    const { MASTER_SECRET: _masterSecret, ...withoutMasterSecret } = base;
+    expect(() => envSchema.parse({
+      ...withoutMasterSecret,
+      NODE_ENV: "production",
+    })).toThrow(/production MASTER_SECRET/);
+  });
+
+  it("rejects the literal development MASTER_SECRET in production even when explicitly provided", () => {
+    expect(() => envSchema.parse({
+      ...base,
+      NODE_ENV: "production",
+      MASTER_SECRET: "development-only-master-secret-32",
+    })).toThrow(/production MASTER_SECRET/);
+  });
 });
