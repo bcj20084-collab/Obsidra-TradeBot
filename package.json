@@ -7,17 +7,17 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "corepack pnpm db:generate && corepack pnpm -r build",
-    "dev": "corepack pnpm --parallel --filter @obsidra/engine --filter @obsidra/api --filter @obsidra/dashboard dev",
+    "build": "pnpm db:generate && pnpm -r build",
+    "dev": "pnpm --parallel --filter @obsidra/engine --filter @obsidra/api --filter @obsidra/dashboard dev",
     "start": "node scripts/start-production.mjs",
-    "typecheck": "corepack pnpm -r typecheck",
-    "test": "corepack pnpm --filter @obsidra/shared build && corepack pnpm -r test",
-    "lint": "corepack pnpm -r lint",
-    "db:generate": "corepack pnpm --filter @obsidra/shared prisma:generate",
-    "db:push": "corepack pnpm --filter @obsidra/shared prisma:push",
-    "db:migrate": "corepack pnpm --filter @obsidra/shared prisma:migrate",
-    "check": "corepack pnpm typecheck && corepack pnpm lint && corepack pnpm test && corepack pnpm build",
-    "audit:prod": "corepack pnpm audit --prod --audit-level high"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @obsidra/shared build && pnpm -r test",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @obsidra/shared prisma:generate",
+    "db:push": "pnpm --filter @obsidra/shared prisma:push",
+    "db:migrate": "pnpm --filter @obsidra/shared prisma:migrate",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "audit:prod": "pnpm audit --prod --audit-level high"
   },
   "devDependencies": {
     "@obsidra/shared": "workspace:*",

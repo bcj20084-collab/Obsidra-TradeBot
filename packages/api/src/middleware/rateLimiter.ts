@@ -1,5 +1,8 @@
 import type { RequestHandler } from "express";
 
+// Railway currently runs this service as a single instance, so an in-memory limiter
+// is sufficient. If the API is horizontally scaled, replace this Map with Redis or
+// another shared store so login attempts are counted across replicas.
 const attempts = new Map<string, number[]>();
 
 export const loginRateLimiter: RequestHandler = (request, response, next) => {
