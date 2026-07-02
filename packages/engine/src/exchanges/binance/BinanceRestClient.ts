@@ -117,6 +117,7 @@ export class BinanceRestClient {
     const filledQty = Number(finalEntry.executedQty ?? entry.executedQty ?? (params.orderType === "Market" ? params.qty : 0));
     const feeUsdt = filledQty > 0 ? await this.getOrderFeeUsdt(params.symbol, String(entry.orderId)) : 0;
     const protective: string[] = [];
+    const protectiveStartAt = Date.now();
     try {
       for (const [type, stopPrice] of [["STOP_MARKET", params.stopLoss], ["TAKE_PROFIT_MARKET", params.takeProfit]] as const) {
         if (!stopPrice) continue;
@@ -124,6 +125,14 @@ export class BinanceRestClient {
           symbol: params.symbol, side: params.side === "Buy" ? "SELL" : "BUY", type, stopPrice: String(stopPrice), closePosition: "true",
         });
         protective.push(String(order.orderId));
+      }
+      if (protective.length > 0) {
+        log.info({
+          symbol: params.symbol,
+          entryOrderId: entry.orderId,
+          protectiveOrderIds: protective,
+          protectiveGapMs: Date.now() - protectiveStartAt,
+        }, "Binance protective-order gap measured");
       }
     } catch (error) {
       const reportedQty = Number(finalEntry.executedQty ?? entry.executedQty ?? 0);
