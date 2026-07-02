@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const prismaMock = vi.hoisted(() => ({
   trade: {
     findMany: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
+  },
+  journalEntry: {
+    create: vi.fn(),
   },
 }));
 
@@ -14,7 +18,7 @@ vi.mock("@obsidra/shared", () => ({
 }));
 
 import type { IExchangeAdapter } from "../exchanges/IExchangeAdapter.js";
-import type { ExecutionJournal } from "./ExecutionJournal.js";
+import { ExecutionJournal } from "./ExecutionJournal.js";
 import { ReconciliationService } from "./ReconciliationService.js";
 
 describe("ReconciliationService", () => {
@@ -34,7 +38,13 @@ describe("ReconciliationService", () => {
       stopLoss: 98,
       positionSizeUsdt: 100,
       openedAt,
+      feeUsdt: 0,
     }]);
+    prismaMock.trade.findUniqueOrThrow.mockResolvedValue({
+      id: "trade-1",
+      positionSizeUsdt: 100,
+      openedAt,
+    });
     const closedAt = Date.now();
     const adapter = {
       exchangeId: "binance",
@@ -51,7 +61,7 @@ describe("ReconciliationService", () => {
         closedAt,
       }),
     } as unknown as IExchangeAdapter;
-    const journal = { record: vi.fn().mockResolvedValue(undefined) } as unknown as ExecutionJournal;
+    const journal = new ExecutionJournal();
     const notify = vi.fn().mockResolvedValue(undefined);
 
     await new ReconciliationService([adapter], journal, notify).reconcile("BTCUSDT");
@@ -62,15 +72,23 @@ describe("ReconciliationService", () => {
         status: "CLOSED",
         closeReason: "TAKE_PROFIT",
         exitPrice: 105,
+        feeUsdt: 0.1,
         pnlUsdt: 5,
         pnlPct: 5,
+        slippage: 0,
       }),
     });
-    expect(journal.record).toHaveBeenCalledWith("RECONCILIATION_LOCAL_CLOSED", expect.objectContaining({
-      exchange: "binance",
-      closeReason: "TAKE_PROFIT",
-      pnlUsdt: 5,
-    }), "trade-1");
+    expect(prismaMock.journalEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "RECONCILIATION_LOCAL_CLOSED",
+        tradeId: "trade-1",
+        data: expect.objectContaining({
+          exchange: "binance",
+          closeReason: "TAKE_PROFIT",
+          pnlUsdt: 5,
+        }),
+      }),
+    });
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       symbol: "BTCUSDT",
       pnlUsdt: 5,

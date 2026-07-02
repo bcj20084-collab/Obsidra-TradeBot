@@ -39,20 +39,29 @@ export class ReconciliationService {
               ? distanceToTp <= distanceToSl ? "TAKE_PROFIT" : "STOP_LOSS"
               : "RECONCILIATION";
             const closedAt = belongsToTrade ? new Date(closed.closedAt) : new Date();
-            const holdTimeSeconds = trade.openedAt ? Math.max(0, Math.round((closedAt.getTime() - trade.openedAt.getTime()) / 1_000)) : null;
-            await prisma.trade.update({
-              where: { id: trade.id },
-              data: {
-                status: "CLOSED",
+            const closedMath = await this.journal.closeTrade({
+              tradeId: trade.id,
+              intendedPrice: trade.entryPrice ?? exitPrice,
+              fillPrice: trade.entryPrice ?? exitPrice,
+              exitPrice,
+              closeReason,
+              closedAt,
+              feeUsdt: belongsToTrade ? closed.feeUsdt : trade.feeUsdt,
+              pnlUsdt,
+              pnlPct,
+            });
+            /*
+             * closeTrade is now the single source of truth for the CLOSED update.
+             * Keep this data shape here only as documentation of the old inline path:
+             * {
                 closedAt,
                 closeReason,
                 exitPrice: exitPrice || null,
                 pnlUsdt,
                 pnlPct,
-                holdTimeSeconds,
                 ...(belongsToTrade ? { feeUsdt: closed.feeUsdt } : {}),
-              },
-            });
+             * }
+             */
             await this.journal.record("RECONCILIATION_LOCAL_CLOSED", {
               exchange: adapter.exchangeId,
               reason: "Missing on exchange",
@@ -74,7 +83,7 @@ export class ReconciliationService {
                 pnlUsdt,
                 pnlPct,
                 reason: closeReason,
-                holdTimeMinutes: (holdTimeSeconds ?? 0) / 60,
+                holdTimeMinutes: (closedMath.holdTimeSeconds ?? 0) / 60,
               });
             }
           }

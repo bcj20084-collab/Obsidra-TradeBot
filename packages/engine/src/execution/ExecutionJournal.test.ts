@@ -51,4 +51,40 @@ describe("ExecutionJournal", () => {
       data: expect.objectContaining({ type: "POSITION_CLOSED", tradeId: "trade-1" }),
     }));
   });
+
+  it("uses exchange-reported reconciliation PnL without subtracting fees again", async () => {
+    const openedAt = new Date(Date.now() - 60_000);
+    prismaMock.trade.findUniqueOrThrow.mockResolvedValue({
+      id: "trade-1",
+      positionSizeUsdt: 100,
+      openedAt,
+    });
+    const closedAt = new Date();
+
+    const result = await new ExecutionJournal().closeTrade({
+      tradeId: "trade-1",
+      intendedPrice: 100,
+      fillPrice: 100,
+      exitPrice: 105,
+      feeUsdt: 0.1,
+      pnlUsdt: 5,
+      closeReason: "TAKE_PROFIT",
+      closedAt,
+    });
+
+    expect(result.pnlUsdt).toBe(5);
+    expect(result.feeUsdt).toBe(0.1);
+    expect(prismaMock.trade.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "trade-1" },
+      data: expect.objectContaining({
+        status: "CLOSED",
+        closeReason: "TAKE_PROFIT",
+        exitPrice: 105,
+        feeUsdt: 0.1,
+        pnlUsdt: 5,
+        pnlPct: 5,
+        slippage: 0,
+      }),
+    }));
+  });
 });
