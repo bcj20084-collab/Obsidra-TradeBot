@@ -5,6 +5,7 @@ import type { Metrics, ReplayCandle, SignalFeedItem, Trade, TradeDetail } from "
 import { EquityCurve } from "../components/EquityCurve";
 import { MetricsCards } from "../components/MetricsCards";
 import { ObsidraCommandCenter } from "../components/ObsidraCommandCenter";
+import { OpenTradeMonitor } from "../components/OpenTradeMonitor";
 import { SignalFeed } from "../components/SignalFeed";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
@@ -40,6 +41,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
   return (
     <div className="space-y-6">
       <ObsidraCommandCenter metrics={metrics} trades={trades} signals={signals} />
+      <OpenTradeMonitor />
 
       <section className="hero-grid">
         <div className="glass-card hero-card">

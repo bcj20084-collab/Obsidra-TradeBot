@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BrainCircuit, Clock3, RadioTower, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { AiActivityCommand } from "../components/AiActivityCommand";
 import { DeepHealthPanel } from "../components/DeepHealthPanel";
+import { OpenTradeMonitor } from "../components/OpenTradeMonitor";
 import { PremiumIntelligence } from "../components/PremiumIntelligence";
 import { SafetySupervisor } from "../components/SafetySupervisor";
 import { SignalDiagnostics } from "../components/SignalDiagnostics";
@@ -98,6 +99,8 @@ export function AiBrain({ metrics, trades, signals }: { metrics: Metrics; trades
           {error ? <div className="mt-4 pill pill-danger">{error}</div> : <div className="mt-4 pill pill-success">Deep health online</div>}
         </div>
       </section>
+
+      <OpenTradeMonitor />
 
       <PremiumIntelligence metrics={metrics} trades={trades} signals={signals} />
       <AiActivityCommand metrics={metrics} trades={trades} signals={signals} />
