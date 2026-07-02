@@ -24,6 +24,10 @@ describe("DailyLossGuard", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.realizedPnl).toBe(-50);
+    expect(prismaMock.trade.aggregate).toHaveBeenNthCalledWith(1, {
+      where: { closedAt: { gte: expect.any(Date) } },
+      _sum: { pnlUsdt: true },
+    });
   });
 
   it("blocks at exactly the weekly loss limit", async () => {

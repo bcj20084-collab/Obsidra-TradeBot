@@ -35,6 +35,8 @@ export class PortfolioRiskEngine {
       + dca.filter((position) => position.exchange === exchange).reduce((sum, position) => sum + position.totalInvestedUsdt, 0);
     if (exchangeExposure + requested > (exchange === "bybit" ? this.config.bybitMax : this.config.binanceMax)) return reject("Per-exchange exposure exceeded");
     const day = new Date(); day.setUTCHours(0, 0, 0, 0);
+    // Intentional global capital guard. Exposure caps are per-exchange, but realized
+    // daily loss is account-wide so losses on one exchange can pause new risk on all venues.
     const daily = await prisma.trade.aggregate({ where: { closedAt: { gte: day } }, _sum: { pnlUsdt: true } });
     if ((daily._sum.pnlUsdt ?? 0) <= -this.config.dailyLossLimit) return reject("Total daily loss limit reached");
     return { approved: true };

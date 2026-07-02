@@ -54,6 +54,10 @@ describe("PortfolioRiskEngine", () => {
     prismaMock.trade.aggregate.mockResolvedValue({ _sum: { pnlUsdt: -50 } });
     const decision = await engine({ dailyLossLimit: 50 }).approve("binance", "BTCUSDT", 10);
     expect(decision).toEqual({ approved: false, reason: "Total daily loss limit reached" });
+    expect(prismaMock.trade.aggregate).toHaveBeenCalledWith({
+      where: { closedAt: { gte: expect.any(Date) } },
+      _sum: { pnlUsdt: true },
+    });
   });
 
   it("approves when all portfolio limits pass", async () => {

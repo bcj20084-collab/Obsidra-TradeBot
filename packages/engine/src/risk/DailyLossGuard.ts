@@ -6,6 +6,8 @@ export class DailyLossGuard {
   async check(): Promise<{ allowed: boolean; realizedPnl: number; weeklyPnl: number }> {
     const start = new Date();
     start.setUTCHours(0, 0, 0, 0);
+    // Intentional account-level guard: daily and weekly loss limits aggregate all
+    // exchanges/strategies so a bad loss streak on one venue reduces risk everywhere.
     const aggregate = await prisma.trade.aggregate({
       where: { closedAt: { gte: start } },
       _sum: { pnlUsdt: true },

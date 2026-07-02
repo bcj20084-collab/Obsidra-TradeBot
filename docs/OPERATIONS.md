@@ -64,6 +64,10 @@ accidentally mix simulations with real-money fills.
 - Paper market orders cross the current bid/ask, apply `PAPER_SLIPPAGE_BPS`, and charge
   `PAPER_FEE_RATE`. Tune both values conservatively for the exchange and account tier.
 - `MAX_RISK_PER_TRADE_PCT` caps the estimated loss at the stop, including leverage.
+- Daily and weekly loss limits are intentionally global/account-level across all
+  exchanges and strategies. Per-exchange exposure caps still limit venue
+  concentration, but realized loss guards protect total capital: a loss streak on
+  Binance can pause new risk on Bybit, and vice versa.
 - After `MAX_CONSECUTIVE_LOSSES`, new entries pause for `LOSS_COOLDOWN_MINUTES`.
 - Backtests make decisions only from completed candles and execute at the next candle
   open. This avoids same-candle look-ahead bias.
