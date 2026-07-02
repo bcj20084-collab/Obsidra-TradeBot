@@ -70,7 +70,7 @@ describe("ReconciliationService", () => {
       where: { id: "trade-1" },
       data: expect.objectContaining({
         status: "CLOSED",
-        closeReason: "TAKE_PROFIT",
+        closeReason: "RECONCILED_TP_LIKELY",
         exitPrice: 105,
         feeUsdt: 0.1,
         pnlUsdt: 5,
@@ -84,7 +84,7 @@ describe("ReconciliationService", () => {
         tradeId: "trade-1",
         data: expect.objectContaining({
           exchange: "binance",
-          closeReason: "TAKE_PROFIT",
+          closeReason: "RECONCILED_TP_LIKELY",
           pnlUsdt: 5,
         }),
       }),
@@ -92,7 +92,7 @@ describe("ReconciliationService", () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       symbol: "BTCUSDT",
       pnlUsdt: 5,
-      reason: "TAKE_PROFIT",
+      reason: "RECONCILED_TP_LIKELY",
     }));
   });
 });

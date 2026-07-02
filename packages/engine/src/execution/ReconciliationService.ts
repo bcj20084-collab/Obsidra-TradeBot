@@ -36,7 +36,7 @@ export class ReconciliationService {
             const distanceToTp = Math.abs(exitPrice - trade.takeProfit);
             const distanceToSl = Math.abs(exitPrice - trade.stopLoss);
             const closeReason = belongsToTrade
-              ? distanceToTp <= distanceToSl ? "TAKE_PROFIT" : "STOP_LOSS"
+              ? distanceToTp <= distanceToSl ? "RECONCILED_TP_LIKELY" : "RECONCILED_SL_LIKELY"
               : "RECONCILIATION";
             const closedAt = belongsToTrade ? new Date(closed.closedAt) : new Date();
             const closedMath = await this.journal.closeTrade({
@@ -70,7 +70,7 @@ export class ReconciliationService {
             }, trade.id);
             operatorLog(
               pnlUsdt !== null && pnlUsdt >= 0 ? "INFO" : "WARNING",
-              `${closeReason === "TAKE_PROFIT" ? "TAKE PROFIT" : closeReason === "STOP_LOSS" ? "STOP LOSS" : "RECONCILED"} | ${trade.symbol}`,
+              `${closeReason === "RECONCILED_TP_LIKELY" ? "TAKE PROFIT LIKELY" : closeReason === "RECONCILED_SL_LIKELY" ? "STOP LOSS LIKELY" : "RECONCILED"} | ${trade.symbol}`,
               `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt === null ? "unknown" : `${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT`}`,
             );
             if (belongsToTrade && trade.entryPrice && pnlUsdt !== null && pnlPct !== null) {
