@@ -34,6 +34,7 @@ interface SendOptions {
 }
 
 export interface ClosedTradeNotification {
+  exchange?: string;
   symbol: string;
   direction: string;
   entryPrice: number;

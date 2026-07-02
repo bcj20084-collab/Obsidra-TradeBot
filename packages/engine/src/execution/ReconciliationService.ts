@@ -66,6 +66,7 @@ export class ReconciliationService {
             );
             if (belongsToTrade && trade.entryPrice && pnlUsdt !== null && pnlPct !== null) {
               await this.onTradeClosed?.({
+                exchange: adapter.exchangeId,
                 symbol: trade.symbol,
                 direction: trade.direction,
                 entryPrice: trade.entryPrice,

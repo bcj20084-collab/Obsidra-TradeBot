@@ -22,6 +22,7 @@ import { PortfolioRiskEngine } from "./risk/PortfolioRiskEngine.js";
 import { RiskEngine } from "./risk/RiskEngine.js";
 import { AdaptiveParams } from "./signals/AdaptiveParams.js";
 import { CircuitBreaker } from "./signals/CircuitBreaker.js";
+import { recordClosedTradeForCircuitBreakers } from "./signals/TradeCloseCircuitBreaker.js";
 import { MLScorer } from "./signals/MLScorer.js";
 import { SignalEngine } from "./signals/SignalEngine.js";
 import { MLTrainer } from "./signals/MLTrainer.js";
@@ -70,11 +71,11 @@ const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_
 const discord = new DiscordNotifier(env.DISCORD_WEBHOOK_TRADES, env.DISCORD_WEBHOOK_ALERTS, env.DISCORD_WEBHOOK_DAILY);
 const journal = new ExecutionJournal();
 const stateMachine = new OrderStateMachine(journal);
-const orderManager = new OrderManager(exchanges, stateMachine, journal, (trade) => telegram.tradeClosed(trade));
+const orderManager = new OrderManager(exchanges, stateMachine, journal, handleTradeClosed);
 const reconciliation = new ReconciliationService(
   [bybitAdapter, binanceAdapter],
   journal,
-  (trade) => telegram.tradeClosed(trade),
+  handleTradeClosed,
 );
 const metrics = new MetricsCollector();
 const trainer = new MLTrainer();
@@ -119,6 +120,32 @@ interface HistoricalCandlePersistInput {
   close: number;
   volume: number;
   confirmed?: boolean;
+}
+
+async function handleTradeClosed(trade: Parameters<TelegramNotifier["tradeClosed"]>[0]): Promise<void> {
+  const updatedContexts = recordClosedTradeForCircuitBreakers(contexts.values(), trade);
+  for (const context of updatedContexts) {
+    const breakerState = context.circuitBreaker.state;
+    if (breakerState.active) {
+      operatorLog(
+        "WARNING",
+        `CIRCUIT BREAKER | ${context.exchange.toUpperCase()}:${context.symbol}`,
+        breakerState.reason ?? "Circuit breaker active after closed trade",
+      );
+      await journal.record("CIRCUIT_BREAKER_TRIPPED", {
+        exchange: context.exchange,
+        symbol: context.symbol,
+        reason: breakerState.reason,
+        consecutiveLosses: breakerState.consecutiveLosses,
+        pnlUsdt: trade.pnlUsdt,
+      });
+    }
+  }
+  try {
+    await telegram.tradeClosed(trade);
+  } catch (error) {
+    log.warn({ error, symbol: trade.symbol }, "telegram trade-close notification failed");
+  }
 }
 
 const historicalCandleQueue = new Map<string, HistoricalCandlePersistInput>();

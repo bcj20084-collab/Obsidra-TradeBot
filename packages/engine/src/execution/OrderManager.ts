@@ -255,6 +255,7 @@ export class OrderManager {
         `Exit: $${exitPrice.toFixed(4)} | PnL: ${pnlUsdt >= 0 ? "+" : ""}${pnlUsdt.toFixed(2)} USDT (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%) | Reason: ${reason}`,
       );
       await this.onTradeClosed?.({
+        exchange,
         symbol: trade.symbol,
         direction: trade.direction,
         entryPrice: trade.entryPrice,
