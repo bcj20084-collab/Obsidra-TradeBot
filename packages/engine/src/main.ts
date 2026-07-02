@@ -28,6 +28,7 @@ import { SignalEngine } from "./signals/SignalEngine.js";
 import { MLTrainer } from "./signals/MLTrainer.js";
 import { createStrategy } from "./strategies/StrategyFactory.js";
 import { StrategyCoordinator } from "./strategies/StrategyCoordinator.js";
+import { restoreStrategyCoordinator } from "./strategies/StrategyCoordinatorRestore.js";
 import type { ExchangeId, IExchangeAdapter } from "./exchanges/IExchangeAdapter.js";
 import type { ApiCredential } from "./security/ApiKeyManager.js";
 
@@ -477,28 +478,14 @@ async function restoreCoordinator(): Promise<void> {
     prisma.gridLevel.findMany({ where: { status: "ACTIVE" } }),
     prisma.dCAPosition.findMany({ where: { status: { in: ["ACTIVE", "WAITING"] }, totalInvestedUsdt: { gt: 0 } } }),
   ]);
-  for (const trade of open) {
-    const descriptor = descriptors.find((item) => item.id === trade.strategyId);
-    coordinator.open(trade.exchange as "bybit" | "binance", trade.symbol, {
-      strategyId: trade.strategyId,
-      type: descriptor?.type ?? "TREND",
-      direction: trade.direction as Direction,
-      sizeUsdt: trade.positionSizeUsdt,
-    });
-    if (["TREND", "PULLBACK"].includes(descriptor?.type ?? "TREND")) void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId);
-  }
-  for (const descriptor of descriptors.filter((item) => item.type === "GRID")) {
-    const exposure = gridLevels.filter((level) => level.strategyId === descriptor.id).reduce((sum, level) => sum + level.orderSizeUsdt, 0);
-    if (exposure > 0) coordinator.open(descriptor.exchange, descriptor.symbol, { strategyId: descriptor.id, type: "GRID", direction: "LONG", sizeUsdt: exposure });
-  }
-  for (const position of dcaPositions) {
-    coordinator.open(position.exchange as "bybit" | "binance", position.symbol, {
-      strategyId: position.strategyId,
-      type: "DCA",
-      direction: position.direction as Direction,
-      sizeUsdt: position.totalInvestedUsdt,
-    });
-  }
+  restoreStrategyCoordinator({
+    coordinator,
+    descriptors,
+    openTrades: open,
+    gridLevels,
+    dcaPositions,
+    watchTradeClose: (trade) => void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId),
+  });
 }
 
 async function warmMarketData(): Promise<void> {
