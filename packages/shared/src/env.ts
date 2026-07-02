@@ -126,6 +126,13 @@ export const envSchema = z
         path: ["DASHBOARD_PASSWORD_HASH"],
       });
     }
+    if (env.NODE_ENV === "production" && !env.MASTER_SECRET) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Set MASTER_SECRET explicitly in production; JWT_SECRET fallback is not allowed for credential encryption",
+        path: ["MASTER_SECRET"],
+      });
+    }
     if (env.NODE_ENV === "production" && env.MASTER_SECRET === developmentMasterSecret) {
       ctx.addIssue({
         code: "custom",
@@ -179,7 +186,7 @@ export const envSchema = z
   })
   .transform((env) => ({
     ...env,
-    MASTER_SECRET: env.MASTER_SECRET ?? (env.NODE_ENV === "production" ? env.JWT_SECRET : developmentMasterSecret),
+    MASTER_SECRET: env.MASTER_SECRET ?? developmentMasterSecret,
   }));
 
 export type Env = z.infer<typeof envSchema>;
