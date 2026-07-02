@@ -789,6 +789,97 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
       rgba(255,255,255,.045);
   }
 
+  .trade-replay-drawer {
+    @apply absolute right-0 top-0 h-full w-full max-w-6xl overflow-y-auto border-l border-white/10 bg-[#070a12]/95 p-5 shadow-2xl md:p-6;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(214,178,106,.11), transparent 28rem),
+      radial-gradient(circle at 100% 0%, rgba(80,227,194,.10), transparent 28rem),
+      linear-gradient(180deg, rgba(7,10,18,.98), rgba(7,10,18,.94));
+  }
+
+  .trade-replay-topbar {
+    @apply sticky top-0 z-20 -mx-5 -mt-5 flex flex-wrap items-start justify-between gap-4 border-b border-white/10 bg-[#070a12]/90 px-5 py-5 backdrop-blur-xl md:-mx-6 md:-mt-6 md:px-6;
+  }
+
+  .trade-replay-hero-premium {
+    @apply overflow-hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.075), 0 28px 90px rgba(0,0,0,.34);
+  }
+
+  .trade-replay-pnl {
+    @apply min-w-[180px] rounded-[1.65rem] border bg-black/30 px-5 py-4 text-right shadow-glow;
+  }
+
+  .trade-replay-pnl span {
+    @apply block font-mono text-3xl font-black text-white;
+  }
+
+  .trade-replay-pnl small {
+    @apply mt-1 block text-xs font-black uppercase tracking-[0.16em];
+  }
+
+  .trade-replay-pnl-good {
+    @apply border-emerald-400/25;
+    background: radial-gradient(circle at center, rgba(52,211,153,.13), rgba(0,0,0,.28));
+  }
+
+  .trade-replay-pnl-good small { @apply text-emerald-300; }
+
+  .trade-replay-pnl-bad {
+    @apply border-rose-400/25;
+    background: radial-gradient(circle at center, rgba(251,113,133,.13), rgba(0,0,0,.28));
+  }
+
+  .trade-replay-pnl-bad small { @apply text-rose-300; }
+
+  .trade-replay-kpi-grid {
+    @apply grid gap-3 md:grid-cols-2 xl:grid-cols-4;
+  }
+
+  .trade-replay-stat {
+    @apply min-w-0 rounded-[1.55rem] border border-white/10 bg-white/[0.04] p-4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+  }
+
+  .trade-replay-map-card {
+    @apply rounded-[2rem] border border-white/10 bg-black/25 p-5 shadow-glow;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(214,178,106,.10), transparent 20rem),
+      radial-gradient(circle at 100% 0%, rgba(80,227,194,.10), transparent 20rem),
+      rgba(255,255,255,.035);
+  }
+
+  .trade-replay-level-bar {
+    @apply relative h-5 rounded-full bg-white/10;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  }
+
+  .trade-replay-level-bar::before {
+    @apply absolute inset-0 rounded-full content-[''];
+    background: linear-gradient(90deg, rgba(251,113,133,.85), rgba(214,178,106,.82), rgba(80,227,194,.86));
+  }
+
+  .trade-replay-level-marker {
+    @apply absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-1 text-[0.62rem] font-black uppercase tracking-[0.12em];
+  }
+
+  .trade-replay-level-sl {
+    @apply border-rose-400/35 bg-rose-400/20 text-rose-200;
+  }
+
+  .trade-replay-level-entry {
+    @apply border-white/30 bg-white/15 text-white;
+  }
+
+  .trade-replay-level-tp {
+    @apply border-emerald-400/35 bg-emerald-400/20 text-emerald-200;
+  }
+
+  .trade-replay-current-marker {
+    @apply absolute top-1/2 z-20 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-gold;
+    box-shadow: 0 0 0 7px rgba(214,178,106,.13), 0 0 28px rgba(214,178,106,.58);
+  }
+
   .trade-chart-shell {
     @apply rounded-[2rem] border border-white/10 bg-black/25 p-5 shadow-glow;
   }
@@ -1003,6 +1094,35 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .trade-timeline-dot {
     @apply absolute -left-[1.22rem] top-5 h-3 w-3 rounded-full border border-cyan bg-obsidian;
     box-shadow: 0 0 18px rgba(80,227,194,.9);
+  }
+
+  .trade-timeline-dot-good {
+    @apply border-emerald-300 bg-emerald-400;
+    box-shadow: 0 0 18px rgba(52,211,153,.9);
+  }
+
+  .trade-timeline-dot-bad {
+    @apply border-rose-300 bg-rose-400;
+    box-shadow: 0 0 18px rgba(251,113,133,.9);
+  }
+
+  .trade-timeline-dot-info {
+    @apply border-cyan bg-cyan;
+  }
+
+  .trade-event-card {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan/20 hover:bg-white/[0.045];
+  }
+
+  .trade-replay-split {
+    @apply grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)];
+  }
+
+  .trade-decision-card {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(124,92,255,.12), transparent 20rem),
+      radial-gradient(circle at 100% 0%, rgba(80,227,194,.08), transparent 20rem),
+      rgba(255,255,255,.04);
   }
 }
 
