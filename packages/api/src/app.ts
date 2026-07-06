@@ -51,7 +51,7 @@ export function createApp() {
     const since24h = new Date(Date.now() - 86_400_000);
     const since6h = new Date(Date.now() - 6 * 3_600_000);
     try {
-      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, latestLossBrain, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, recentSignalEvents, recentClosedTrades, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, closedTrades24h, latestLossBrain, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, recentSignalEvents, recentClosedTrades, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.findFirst({
@@ -138,6 +138,11 @@ export function createApp() {
             signalData: true,
           },
         }),
+        prisma.trade.findMany({
+          where: { status: "CLOSED", closedAt: { gte: since24h }, pnlUsdt: { not: null } },
+          orderBy: { closedAt: "desc" },
+          select: { symbol: true, exchange: true, strategyId: true, pnlUsdt: true, pnlPct: true, feeUsdt: true, closeReason: true, closedAt: true },
+        }),
         prisma.journalEntry.findMany({
           where: { type: "TRADE_LOSS_ANALYZED", createdAt: { gte: since24h } },
           orderBy: { createdAt: "desc" },
@@ -199,6 +204,24 @@ export function createApp() {
         recentClosedTrades,
         openTrades: openTrades.map(publicTradeSummary),
       });
+      const readyWatchdog = buildReadyWatchdog({
+        strategies: activeStrategies,
+        noTradeDiagnostics,
+        riskGateDiagnostics,
+        recentSignalEvents,
+        openTrades: openTrades.map(publicTradeSummary),
+      });
+      const operatorReport24h = buildOperatorReport24h({
+        closedTrades24h,
+        noTradeDiagnostics,
+        riskGateDiagnostics,
+        readyWatchdog,
+        signalsReady24h,
+        signalsSkipped24h,
+        riskRejected24h,
+        openPositionsCount,
+        lastTradeAgeHours,
+      });
       response.json({
         ok: true,
         service: "obsidra-api",
@@ -210,6 +233,8 @@ export function createApp() {
         pullbackControl,
         noTradeDiagnostics,
         riskGateDiagnostics,
+        readyWatchdog,
+        operatorReport24h,
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
@@ -461,6 +486,150 @@ type RiskRejectedEvent = {
 };
 
 type PublicTradeSummary = ReturnType<typeof publicTradeSummary>;
+type NoTradeDiagnosticsResult = ReturnType<typeof buildNoTradeDiagnostics>;
+type RiskGateDiagnosticsResult = ReturnType<typeof buildRiskGateDiagnostics>;
+
+type ClosedTrade24h = {
+  symbol: string;
+  exchange: string;
+  strategyId: string;
+  pnlUsdt: number | null;
+  pnlPct: number | null;
+  feeUsdt: number | null;
+  closeReason: string | null;
+  closedAt: Date | null;
+};
+
+function buildReadyWatchdog(input: {
+  strategies: ActiveStrategy[];
+  noTradeDiagnostics: NoTradeDiagnosticsResult;
+  riskGateDiagnostics: RiskGateDiagnosticsResult;
+  recentSignalEvents: RecentSignalEvent[];
+  openTrades: PublicTradeSummary[];
+}) {
+  const items = input.strategies.map((strategy) => {
+    const noTrade = input.noTradeDiagnostics.items.find((item) => item.strategyId === strategy.id);
+    const risk = input.riskGateDiagnostics.items.find((item) => item.strategyId === strategy.id);
+    const latestReady = input.recentSignalEvents.find((event) => {
+      if (!["SIGNAL_READY", "SIGNAL_GENERATED"].includes(event.type)) return false;
+      const data = signalRecord(event.data);
+      const signal = signalRecord(data.signal);
+      return data.symbol === strategy.symbol || signal.symbol === strategy.symbol;
+    });
+    const open = input.openTrades.find((trade) => trade.strategyId === strategy.id || (trade.symbol === strategy.symbol && trade.exchange === strategy.exchange));
+    const readyAgeMinutes = latestReady ? Math.round((Date.now() - latestReady.createdAt.getTime()) / 60_000) : null;
+    const staleReady = Boolean(!open && readyAgeMinutes !== null && readyAgeMinutes >= 30 && risk?.level === "CLEAR");
+    const status = open ? "EXECUTING" : staleReady ? "WATCH" : noTrade?.status === "READY" ? "READY" : "OK";
+    return {
+      strategyId: strategy.id,
+      symbol: strategy.symbol,
+      exchange: strategy.exchange,
+      status,
+      readyAgeMinutes,
+      latestReadyAt: latestReady?.createdAt ?? null,
+      riskLevel: risk?.level ?? "UNKNOWN",
+      noTradeStatus: noTrade?.status ?? "UNKNOWN",
+      reason: open
+        ? `Managing ${open.direction} ${open.status}.`
+        : staleReady
+          ? `Signal has been READY for ${readyAgeMinutes}m without execution.`
+          : noTrade?.reason ?? "No ready signal waiting.",
+      nextAction: open
+        ? "Let trade monitor handle SL/TP/timeout."
+        : staleReady
+          ? "Inspect SignalEngine -> RiskEngine -> OrderManager path if this persists."
+          : noTrade?.nextAction ?? "Continue scanning.",
+    };
+  });
+  const watchCount = items.filter((item) => item.status === "WATCH").length;
+  return {
+    level: watchCount ? "WATCH" : "OK",
+    summary: watchCount
+      ? `${watchCount} ready signal(s) are aging without execution.`
+      : "Ready watchdog is clean: no stale ready signals.",
+    generatedAt: new Date().toISOString(),
+    items,
+  };
+}
+
+function buildOperatorReport24h(input: {
+  closedTrades24h: ClosedTrade24h[];
+  noTradeDiagnostics: NoTradeDiagnosticsResult;
+  riskGateDiagnostics: RiskGateDiagnosticsResult;
+  readyWatchdog: ReturnType<typeof buildReadyWatchdog>;
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  riskRejected24h: number;
+  openPositionsCount: number;
+  lastTradeAgeHours: number | null;
+}) {
+  const pnl = input.closedTrades24h.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+  const fees = input.closedTrades24h.reduce((sum, trade) => sum + (trade.feeUsdt ?? 0), 0);
+  const wins = input.closedTrades24h.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
+  const losses = input.closedTrades24h.filter((trade) => (trade.pnlUsdt ?? 0) < 0).length;
+  const topBlocker = input.readyWatchdog.level === "WATCH"
+    ? input.readyWatchdog.summary
+    : input.riskGateDiagnostics.level !== "CLEAR"
+      ? input.riskGateDiagnostics.summary
+      : input.noTradeDiagnostics.summary;
+  const recommendation = reportRecommendation({
+    pnl,
+    trades: input.closedTrades24h.length,
+    readyWatchdogLevel: input.readyWatchdog.level,
+    riskLevel: input.riskGateDiagnostics.level,
+    signalsReady24h: input.signalsReady24h,
+    signalsSkipped24h: input.signalsSkipped24h,
+    lastTradeAgeHours: input.lastTradeAgeHours,
+  });
+  return {
+    level: input.readyWatchdog.level === "WATCH" || input.riskGateDiagnostics.level !== "CLEAR" ? "WATCH" : pnl < 0 ? "LEARNING" : "OK",
+    generatedAt: new Date().toISOString(),
+    trades: input.closedTrades24h.length,
+    wins,
+    losses,
+    winRate: input.closedTrades24h.length ? (wins / input.closedTrades24h.length) * 100 : 0,
+    pnlUsdt: pnl,
+    feesUsdt: fees,
+    signalsReady24h: input.signalsReady24h,
+    signalsSkipped24h: input.signalsSkipped24h,
+    riskRejected24h: input.riskRejected24h,
+    openPositionsCount: input.openPositionsCount,
+    lastTradeAgeHours: input.lastTradeAgeHours,
+    topBlocker,
+    recommendation,
+    symbols: summarizeReportSymbols(input.closedTrades24h),
+  };
+}
+
+function reportRecommendation(input: {
+  pnl: number;
+  trades: number;
+  readyWatchdogLevel: string;
+  riskLevel: string;
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  lastTradeAgeHours: number | null;
+}): string {
+  if (input.readyWatchdogLevel === "WATCH") return "Investigate stale READY signals before relaxing risk or adding more symbols.";
+  if (input.riskLevel !== "CLEAR") return "Keep paper mode and let risk protections clear before changing thresholds.";
+  if (input.trades === 0 && (input.lastTradeAgeHours ?? 0) > 24) return "No trades in 24h; keep watching signal quality and consider a controlled threshold review after more data.";
+  if (input.pnl < 0) return "Stay in paper recovery mode; reduce size and collect more closed-trade evidence.";
+  if (input.signalsReady24h > 0 && input.trades === 0) return "Signals appeared but no trades closed; inspect open/execution path if this repeats.";
+  return "System is healthy; continue paper forward-test and avoid forcing trades.";
+}
+
+function summarizeReportSymbols(trades: ClosedTrade24h[]) {
+  const map = new Map<string, { symbol: string; pnlUsdt: number; trades: number; wins: number; losses: number }>();
+  for (const trade of trades) {
+    const row = map.get(trade.symbol) ?? { symbol: trade.symbol, pnlUsdt: 0, trades: 0, wins: 0, losses: 0 };
+    row.pnlUsdt += trade.pnlUsdt ?? 0;
+    row.trades += 1;
+    if ((trade.pnlUsdt ?? 0) > 0) row.wins += 1;
+    if ((trade.pnlUsdt ?? 0) < 0) row.losses += 1;
+    map.set(trade.symbol, row);
+  }
+  return [...map.values()].sort((a, b) => Math.abs(b.pnlUsdt) - Math.abs(a.pnlUsdt)).slice(0, 8);
+}
 
 function buildRiskGateDiagnostics(input: {
   strategies: ActiveStrategy[];

@@ -61,6 +61,8 @@ export interface DeepHealth {
   pullbackControl?: PullbackControl | null;
   noTradeDiagnostics?: NoTradeDiagnostics | null;
   riskGateDiagnostics?: RiskGateDiagnostics | null;
+  readyWatchdog?: ReadyWatchdog | null;
+  operatorReport24h?: OperatorReport24h | null;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
@@ -147,6 +149,43 @@ export interface RiskGateDiagnosticItem {
   lossStreak: number;
   openExposureUsdt: number;
   nextAction: string;
+}
+
+export interface ReadyWatchdog {
+  level: "OK" | "WATCH" | string;
+  summary: string;
+  generatedAt: string;
+  items: Array<{
+    strategyId: string;
+    symbol: string;
+    exchange: string;
+    status: "OK" | "READY" | "WATCH" | "EXECUTING" | string;
+    readyAgeMinutes: number | null;
+    latestReadyAt: string | null;
+    riskLevel: string;
+    noTradeStatus: string;
+    reason: string;
+    nextAction: string;
+  }>;
+}
+
+export interface OperatorReport24h {
+  level: "OK" | "WATCH" | "LEARNING" | string;
+  generatedAt: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  pnlUsdt: number;
+  feesUsdt: number;
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  riskRejected24h: number;
+  openPositionsCount: number;
+  lastTradeAgeHours: number | null;
+  topBlocker: string;
+  recommendation: string;
+  symbols: Array<{ symbol: string; pnlUsdt: number; trades: number; wins: number; losses: number }>;
 }
 
 export interface LossBrainItem {

@@ -131,6 +131,8 @@ export class TelegramNotifier {
       commands: [
         { command: "status", description: "Status bot si activitate" },
         { command: "why", description: "De ce nu intra in trade" },
+        { command: "report", description: "Raport 24h complet" },
+        { command: "risk", description: "Risk gate pe simboluri" },
         { command: "positions", description: "Pozitii deschise" },
         { command: "pnl", description: "Profit si pierderi" },
         { command: "trades", description: "Ultimele tranzactii" },
@@ -312,6 +314,12 @@ export class TelegramNotifier {
         case "/why":
           await this.sendWhyNoTrade();
           return;
+        case "/report":
+          await this.sendOperatorReport();
+          return;
+        case "/risk":
+          await this.sendRiskGateStatus();
+          return;
         case "/positions":
           await this.sendPositions();
           return;
@@ -369,6 +377,8 @@ export class TelegramNotifier {
       "<b>Monitorizare</b>",
       "/status - stare bot si PnL azi",
       "/why - de ce nu intra in trade acum",
+      "/report - raport 24h complet",
+      "/risk - risk gate pe simboluri",
       "/positions - pozitii deschise",
       "/pnl - performanta azi / 7 zile / total",
       "/trades - ultimele tranzactii",
@@ -500,6 +510,78 @@ export class TelegramNotifier {
       "",
       "Dashboard: <b>Mission Control → Why no trade + Risk Gate</b>",
     ].join("\n"), { dedupeKey: `manual-why:${Date.now()}`, dedupeMs: 0 });
+  }
+
+  private async sendOperatorReport(): Promise<void> {
+    const since24h = new Date(Date.now() - 86_400_000);
+    const [closed, openTrades, signalsReady, signalsSkipped, riskRejected, latestSignal] = await Promise.all([
+      prisma.trade.findMany({
+        where: { status: "CLOSED", closedAt: { gte: since24h }, pnlUsdt: { not: null } },
+        orderBy: { closedAt: "desc" },
+        select: { symbol: true, pnlUsdt: true, feeUsdt: true, closeReason: true, closedAt: true },
+      }),
+      prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } }, orderBy: { updatedAt: "desc" }, take: 10 }),
+      prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_READY", "SIGNAL_GENERATED"] }, createdAt: { gte: since24h } } }),
+      prisma.journalEntry.count({ where: { type: { in: ["SIGNAL_SKIPPED", "RISK_REJECTED"] }, createdAt: { gte: since24h } } }),
+      prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since24h } } }),
+      prisma.journalEntry.findFirst({
+        where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] }, createdAt: { gte: since24h } },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+    const pnl = closed.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
+    const fees = closed.reduce((sum, trade) => sum + (trade.feeUsdt ?? 0), 0);
+    const wins = closed.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
+    const latestReason = latestSignal ? reasonFromSignal(latestSignal.type, latestSignal.data) : "waiting";
+    const recommendation = closed.length === 0 && signalsReady > 0
+      ? "Signals appeared but no closed trades. Watch execution path if this repeats."
+      : pnl < 0
+        ? "Stay in paper recovery mode; do not force live trading."
+        : "Keep forward-testing. Risk gate remains the boss.";
+    await this.send([
+      `${ICON.chart} <b>OBSIDRA 24H REPORT</b>`,
+      `Trades: <b>${closed.length}</b> | WR: <b>${closed.length ? ((wins / closed.length) * 100).toFixed(1) : "0.0"}%</b>`,
+      `PnL: <b>${formatSigned(pnl)} USDT</b> | Fees: <b>${fees.toFixed(2)} USDT</b>`,
+      `Open Positions: <b>${openTrades.length}</b>`,
+      `Signals: <b>${signalsReady}</b> ready | <b>${signalsSkipped}</b> skipped/rejected`,
+      `Risk Rejects: <b>${riskRejected}</b>`,
+      `Latest: <b>${escapeTelegramHtml(latestReason)}</b>`,
+      "",
+      `Recommendation: <b>${escapeTelegramHtml(recommendation)}</b>`,
+    ].join("\n"), { dedupeKey: `manual-report:${Date.now()}`, dedupeMs: 0 });
+  }
+
+  private async sendRiskGateStatus(): Promise<void> {
+    const since24h = new Date(Date.now() - 86_400_000);
+    const [riskRejects, openTrades, closed] = await Promise.all([
+      prisma.journalEntry.findMany({
+        where: { type: "RISK_REJECTED", createdAt: { gte: since24h } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } }, take: 20 }),
+      prisma.trade.findMany({
+        where: { status: "CLOSED", pnlUsdt: { not: null } },
+        orderBy: { closedAt: "desc" },
+        take: 50,
+        select: { symbol: true, pnlUsdt: true },
+      }),
+    ]);
+    const symbols = ["BTCUSDT", "ETHUSDT", "DOGEUSDT"];
+    const lines = symbols.map((symbol) => {
+      const rejects = riskRejects.filter((entry) => symbolFromJournal(entry.data) === symbol);
+      const exposure = openTrades.filter((trade) => trade.symbol === symbol).reduce((sum, trade) => sum + trade.positionSizeUsdt, 0);
+      const lossStreak = consecutiveLossesForSymbol(closed.filter((trade) => trade.symbol === symbol));
+      const latest = rejects[0];
+      if (!latest) return `${ICON.success} <b>${symbol}</b>: CLEAR | loss streak ${lossStreak} | exposure ${exposure.toFixed(2)} USDT`;
+      return `${ICON.warning} <b>${symbol}</b>: ${rejects.length} reject | ${escapeTelegramHtml(reasonFromRisk(latest.data))}`;
+    });
+    await this.send([
+      `${ICON.lock} <b>RISK GATE</b>`,
+      ...lines,
+      "",
+      "Dashboard: <b>Mission Control → Risk Gate</b>",
+    ].join("\n"), { dedupeKey: `manual-risk:${Date.now()}`, dedupeMs: 0 });
   }
 
   private async sendPnl(): Promise<void> {
