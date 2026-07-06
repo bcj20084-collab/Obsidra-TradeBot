@@ -30,6 +30,7 @@ export function SystemDeployCenter() {
   const running = Boolean(health?.ok && health.db && health.botStatus === "RUNNING");
   const pullback = health?.pullbackControl;
   const lastSignal = health?.latestSignalEvent;
+  const noTrade = health?.noTradeDiagnostics;
   const commit = deploy?.commitSha ? deploy.commitSha.slice(0, 8) : "railway";
   const domain = deploy?.railwayPublicDomain ?? deploy?.railwayStaticUrl ?? "dashboard";
 
@@ -99,6 +100,12 @@ export function SystemDeployCenter() {
           icon={RadioTower}
           value={lastSignal?.type ?? "Waiting"}
           detail={lastSignal ? formatTime(lastSignal.createdAt) : "No recent event"}
+        />
+        <FlowCard
+          title="Why no trade"
+          icon={ShieldCheck}
+          value={noTrade?.items.find((item) => ["COOLING_DOWN", "PROTECTED", "PAUSED", "FILTERED"].includes(item.status))?.status ?? "Scanning"}
+          detail={noTrade?.summary ?? "Waiting for no-trade diagnostics"}
         />
         <FlowCard
           title="DOGE Pullback"

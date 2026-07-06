@@ -51,7 +51,7 @@ export function createApp() {
     const since24h = new Date(Date.now() - 86_400_000);
     const since6h = new Date(Date.now() - 6 * 3_600_000);
     try {
-      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, latestLossBrain, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, dbCheck] = await Promise.all([
+      const [state, latestTrade, latestOpenTrade, openTrades, recentTrades6h, latestLossBrain, openPositionsCount, signalsReady24h, signalsSkipped24h, riskRejected24h, riskRejectedEvents24h, latestSignalEvent, recentSignalEvents, recentClosedTrades, dbCheck] = await Promise.all([
         prisma.botState.findUnique({ where: { id: "singleton" } }),
         prisma.trade.findFirst({ orderBy: { updatedAt: "desc" }, select: { symbol: true, status: true, updatedAt: true, closedAt: true } }),
         prisma.trade.findFirst({
@@ -61,6 +61,7 @@ export function createApp() {
             id: true,
             symbol: true,
             exchange: true,
+            strategyId: true,
             executionMode: true,
             direction: true,
             status: true,
@@ -83,6 +84,7 @@ export function createApp() {
             id: true,
             symbol: true,
             exchange: true,
+            strategyId: true,
             executionMode: true,
             direction: true,
             status: true,
@@ -116,6 +118,7 @@ export function createApp() {
             id: true,
             symbol: true,
             exchange: true,
+            strategyId: true,
             executionMode: true,
             direction: true,
             status: true,
@@ -160,6 +163,18 @@ export function createApp() {
           orderBy: { createdAt: "desc" },
           select: { type: true, data: true, createdAt: true },
         }),
+        prisma.journalEntry.findMany({
+          where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] }, createdAt: { gte: since24h } },
+          orderBy: { createdAt: "desc" },
+          take: 250,
+          select: { type: true, data: true, createdAt: true },
+        }),
+        prisma.trade.findMany({
+          where: { status: "CLOSED", pnlUsdt: { not: null } },
+          orderBy: { closedAt: "desc" },
+          take: 100,
+          select: { symbol: true, exchange: true, strategyId: true, pnlUsdt: true, pnlPct: true, closeReason: true, closedAt: true },
+        }),
         prisma.$queryRaw`SELECT 1`,
       ]);
       const blockedByOpenPosition24h = riskRejectedEvents24h.filter((entry) => riskReason(entry.data) === "Open position already exists").length;
@@ -167,6 +182,17 @@ export function createApp() {
       const lastTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
       const lastTradeAgeHours = lastTradeAt ? (Date.now() - lastTradeAt.getTime()) / 3_600_000 : null;
       const pullbackControl = await buildPullbackControl(activeStrategies.find((strategy) => strategy.type === "PULLBACK"));
+      const noTradeDiagnostics = buildNoTradeDiagnostics({
+        strategies: activeStrategies,
+        botStatus: state?.status ?? "UNKNOWN",
+        openTrades: openTrades.map(publicTradeSummary),
+        pullbackControl,
+        recentSignalEvents,
+        recentClosedTrades,
+        signalsReady24h,
+        signalsSkipped24h,
+        lastTradeAgeHours,
+      });
       response.json({
         ok: true,
         service: "obsidra-api",
@@ -176,6 +202,7 @@ export function createApp() {
         botReason: state?.reason ?? null,
         activeStrategies,
         pullbackControl,
+        noTradeDiagnostics,
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
@@ -323,6 +350,7 @@ function publicTradeSummary(trade: {
   id: string;
   symbol: string;
   exchange: string;
+  strategyId: string;
   executionMode: string;
   direction: string;
   status: string;
@@ -345,6 +373,7 @@ function publicTradeSummary(trade: {
     id: trade.id,
     symbol: trade.symbol,
     exchange: trade.exchange,
+    strategyId: trade.strategyId,
     executionMode: trade.executionMode,
     direction: trade.direction,
     status: trade.status,
@@ -402,6 +431,198 @@ type ActiveStrategy = {
   mode: string;
   params: Record<string, unknown>;
 };
+
+type RecentSignalEvent = {
+  type: string;
+  data: unknown;
+  createdAt: Date;
+};
+
+type RecentClosedTrade = {
+  symbol: string;
+  exchange: string;
+  strategyId: string;
+  pnlUsdt: number | null;
+  pnlPct: number | null;
+  closeReason: string | null;
+  closedAt: Date | null;
+};
+
+type PublicTradeSummary = ReturnType<typeof publicTradeSummary>;
+
+function buildNoTradeDiagnostics(input: {
+  strategies: ActiveStrategy[];
+  botStatus: string;
+  openTrades: PublicTradeSummary[];
+  pullbackControl: Awaited<ReturnType<typeof buildPullbackControl>>;
+  recentSignalEvents: RecentSignalEvent[];
+  recentClosedTrades: RecentClosedTrade[];
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  lastTradeAgeHours: number | null;
+}) {
+  const items = input.strategies.map((strategy) => {
+    const openTrade = input.openTrades.find((trade) => trade.strategyId === strategy.id || (trade.symbol === strategy.symbol && trade.exchange === strategy.exchange));
+    const latestSignal = latestSignalFor(input.recentSignalEvents, strategy);
+    const signalData = signalRecord(latestSignal?.data);
+    const signalDetails = recordOrEmpty(signalData.details);
+    const signalAgeMinutes = latestSignal ? Math.round((Date.now() - latestSignal.createdAt.getTime()) / 60_000) : null;
+    const recentClosed = input.recentClosedTrades.filter((trade) => trade.symbol === strategy.symbol && trade.exchange === strategy.exchange);
+    const newestClosed = recentClosed[0];
+    const lossStreak = consecutiveLosses(recentClosed);
+    const pullback = strategy.type === "PULLBACK" && input.pullbackControl?.strategyId === strategy.id ? input.pullbackControl : null;
+
+    if (input.botStatus !== "RUNNING") {
+      return diagnosticItem(strategy, "PAUSED", "Bot is not RUNNING.", "Use /resume or Control Room when you want new entries.", latestSignal, recentClosed);
+    }
+    if (openTrade) {
+      return diagnosticItem(strategy, "MANAGING", `${openTrade.symbol} ${openTrade.direction} is already open.`, "Bot is managing the existing paper position before opening another one.", latestSignal, recentClosed);
+    }
+    if (pullback) {
+      const failed = pullback.checklist.filter((check) => !check.passed);
+      const status = pullback.status === "SETUP_READY" ? "READY" : pullback.autoPauseRecommended ? "PROTECTED" : "WAITING";
+      return {
+        ...diagnosticItem(
+          strategy,
+          status,
+          pullback.reason,
+          failed[0]?.detail ?? (pullback.status === "SETUP_READY" ? "Risk gate can evaluate the next setup." : "Waiting for the next 4H confirmation."),
+          latestSignal,
+          recentClosed,
+        ),
+        checklist: pullback.checklist,
+        edgeScore: pullback.edgeScore,
+        nextCheckAt: pullback.nextCandleCloseAt,
+        healthLevel: pullback.healthLevel,
+        healthReason: pullback.healthReason,
+      };
+    }
+
+    if (!latestSignal) {
+      return diagnosticItem(strategy, "SCANNING", "No signal event recorded in the last 24h.", "Engine is collecting market data and waiting for a valid trend setup.", latestSignal, recentClosed);
+    }
+
+    const reason = String(signalData.reason ?? signalData.decision?.reason ?? latestSignal.type);
+    if (reason === "CIRCUIT_BREAKER") {
+      const blockedUntil = stringOrNull(signalDetails.blockedUntil);
+      const remainingCooldownMinutes = safeNumber(signalDetails.remainingCooldownMinutes);
+      return {
+        ...diagnosticItem(
+          strategy,
+          blockedUntil || remainingCooldownMinutes ? "COOLING_DOWN" : "PROTECTED",
+          `Circuit breaker: ${String(signalDetails.circuitBreakerReason ?? "safety pause")}.`,
+          blockedUntil
+            ? `Auto-recovery at ${new Date(blockedUntil).toLocaleString("en-GB", { timeZone: "Europe/Bucharest" })}.`
+            : "Latest event was a safety block. New code auto-recovers temporary loss streak blocks.",
+          latestSignal,
+          recentClosed,
+        ),
+        blockedUntil,
+        remainingCooldownMinutes,
+      };
+    }
+    if (reason === "NO_TREND") {
+      return diagnosticItem(strategy, "WAITING", `No valid trend for ${strategy.symbol}.`, trendDetail(signalDetails), latestSignal, recentClosed);
+    }
+    if (reason === "FUNDING_FILTER") {
+      return diagnosticItem(strategy, "FILTERED", "Funding filter blocked the setup.", `Funding rate ${formatMaybeNumber(signalDetails.fundingRate)} is above allowed threshold.`, latestSignal, recentClosed);
+    }
+    if (latestSignal.type === "SIGNAL_READY" || latestSignal.type === "SIGNAL_GENERATED") {
+      return diagnosticItem(strategy, "READY", `Signal ready for ${strategy.symbol}.`, "Risk engine can approve the next execution if guardrails pass.", latestSignal, recentClosed);
+    }
+
+    return diagnosticItem(
+      strategy,
+      lossStreak >= 3 ? "PROTECTED" : "WAITING",
+      `${reason.replaceAll("_", " ").toLowerCase()} (${signalAgeMinutes ?? "?"}m ago).`,
+      newestClosed && (newestClosed.pnlUsdt ?? 0) < 0
+        ? `Last closed trade lost ${formatSignedNumber(newestClosed.pnlUsdt)} USDT via ${newestClosed.closeReason ?? "unknown"}.`
+        : "Waiting for the next qualified setup.",
+      latestSignal,
+      recentClosed,
+    );
+  });
+  const blocked = items.filter((item) => ["COOLING_DOWN", "PROTECTED", "PAUSED"].includes(item.status)).length;
+  const ready = items.filter((item) => item.status === "READY").length;
+  const waiting = items.length - blocked - ready;
+  return {
+    summary: ready > 0
+      ? `${ready} strategy setup is ready for risk review.`
+      : blocked > 0
+        ? `${blocked} strategy guardrail(s) are protecting the bot; ${waiting} still scanning/waiting.`
+        : "Bot is online and waiting for clean market setups.",
+    generatedAt: new Date().toISOString(),
+    signalsReady24h: input.signalsReady24h,
+    signalsSkipped24h: input.signalsSkipped24h,
+    lastTradeAgeHours: input.lastTradeAgeHours,
+    items,
+  };
+}
+
+function latestSignalFor(events: RecentSignalEvent[], strategy: ActiveStrategy): RecentSignalEvent | null {
+  return events.find((event) => {
+    const data = signalRecord(event.data);
+    const details = recordOrEmpty(data.details);
+    return (data.symbol === strategy.symbol || details.symbol === strategy.symbol)
+      && (data.exchange === strategy.exchange || data.exchange === undefined);
+  }) ?? null;
+}
+
+function signalRecord(data: unknown): Record<string, any> {
+  return data && typeof data === "object" ? data as Record<string, any> : {};
+}
+
+function recordOrEmpty(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function diagnosticItem(strategy: ActiveStrategy, status: string, reason: string, nextAction: string, latestSignal: RecentSignalEvent | null | undefined, recentClosed: RecentClosedTrade[]) {
+  const lastClosed = recentClosed[0] ?? null;
+  return {
+    strategyId: strategy.id,
+    type: strategy.type,
+    exchange: strategy.exchange,
+    symbol: strategy.symbol,
+    mode: strategy.mode,
+    status,
+    reason,
+    nextAction,
+    latestSignal: latestSignal ? {
+      type: latestSignal.type,
+      createdAt: latestSignal.createdAt,
+      ageMinutes: Math.round((Date.now() - latestSignal.createdAt.getTime()) / 60_000),
+      reason: String(signalRecord(latestSignal.data).reason ?? latestSignal.type),
+    } : null,
+    lossStreak: consecutiveLosses(recentClosed),
+    lastClosedTrade: lastClosed ? {
+      pnlUsdt: lastClosed.pnlUsdt,
+      pnlPct: lastClosed.pnlPct,
+      closeReason: lastClosed.closeReason,
+      closedAt: lastClosed.closedAt,
+    } : null,
+  };
+}
+
+function consecutiveLosses(trades: RecentClosedTrade[]): number {
+  const firstNonLoss = trades.findIndex((trade) => (trade.pnlUsdt ?? 0) >= 0);
+  return firstNonLoss === -1 ? trades.length : firstNonLoss;
+}
+
+function trendDetail(details: Record<string, unknown>): string {
+  const price = formatMaybeNumber(details.price);
+  const adx = formatMaybeNumber(details.adx);
+  const required = formatMaybeNumber(details.requiredAdx);
+  return `Price ${price}, ADX ${adx}; needs ADX ${required} with EMA alignment.`;
+}
+
+function formatMaybeNumber(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(value >= 10 ? 2 : 4) : "n/a";
+}
+
+function formatSignedNumber(value: number | null): string {
+  if (value === null) return "0.00";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
 
 async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   if (!strategy) return null;

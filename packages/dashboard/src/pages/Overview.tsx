@@ -9,6 +9,7 @@ import { OpenTradeMonitor } from "../components/OpenTradeMonitor";
 import { SignalFeed } from "../components/SignalFeed";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
+import { WhyNoTradePanel } from "../components/WhyNoTradePanel";
 import { trpc } from "../lib/api";
 
 export function Overview({ metrics, trades, signals }: { metrics: Metrics; trades: Trade[]; signals: SignalFeedItem[] }) {
@@ -41,6 +42,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
   return (
     <div className="space-y-6">
       <ObsidraCommandCenter metrics={metrics} trades={trades} signals={signals} />
+      <WhyNoTradePanel />
       <OpenTradeMonitor />
 
       <section className="hero-grid">

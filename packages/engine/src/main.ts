@@ -410,10 +410,19 @@ async function bootstrap(): Promise<void> {
     ["Telegram", telegram.configured ? "connected" : "disabled"],
   ]);
   if (telegram.configured) {
+    const breakerSummary = [...contexts.values()]
+      .map((context) => {
+        const breaker = context.circuitBreaker.state;
+        return `${context.symbol}:${breaker.active ? breaker.reason ?? "blocked" : "OK"}`;
+      })
+      .join(" | ");
     await telegram.send([
       "\u{1F916} <b>OBSIDRA BOT ON</b>",
-      "Status: <b>RUNNING \u{2705}</b>",
+      "Status: <b>RUNNING ✅</b>",
       `Mode: <b>${bybitPaper && binancePaper ? "PAPER" : executionEnvironmentLabel()}</b>`,
+      `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
+      `Circuit breakers: <b>${breakerSummary || "OK"}</b>`,
+      "Dashboard: <b>/status pentru raport manual</b>",
     ].join("\n")).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
   }
 }

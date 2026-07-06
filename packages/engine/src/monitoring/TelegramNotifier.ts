@@ -343,7 +343,7 @@ export class TelegramNotifier {
   private async sendDatabaseStatus(): Promise<void> {
     const start = new Date();
     start.setUTCHours(0, 0, 0, 0);
-    const [state, openTrades, todayTrades] = await Promise.all([
+    const [state, openTrades, todayTrades, latestSignal, latestTrade] = await Promise.all([
       prisma.botState.findUnique({ where: { id: "singleton" } }),
       prisma.trade.findMany({
         where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
@@ -353,9 +353,24 @@ export class TelegramNotifier {
         where: { closedAt: { gte: start }, pnlUsdt: { not: null } },
         select: { pnlUsdt: true },
       }),
+      prisma.journalEntry.findFirst({
+        where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] } },
+        orderBy: { createdAt: "desc" },
+        select: { type: true, data: true, createdAt: true },
+      }),
+      prisma.trade.findFirst({
+        orderBy: { updatedAt: "desc" },
+        select: { symbol: true, status: true, pnlUsdt: true, closeReason: true, closedAt: true, updatedAt: true },
+      }),
     ]);
     const pnl = todayTrades.reduce((sum, trade) => sum + (trade.pnlUsdt ?? 0), 0);
     const wins = todayTrades.filter((trade) => (trade.pnlUsdt ?? 0) > 0).length;
+    const latestSignalData = latestSignal?.data && typeof latestSignal.data === "object" ? latestSignal.data as Record<string, unknown> : {};
+    const latestSignalDetails = latestSignalData.details && typeof latestSignalData.details === "object" ? latestSignalData.details as Record<string, unknown> : {};
+    const latestSignalSymbol = String(latestSignalData.symbol ?? latestSignalDetails.symbol ?? "UNKNOWN");
+    const latestSignalReason = String(latestSignalData.reason ?? latestSignalData.decision ?? latestSignal?.type ?? "waiting");
+    const latestTradeAt = latestTrade?.closedAt ?? latestTrade?.updatedAt ?? null;
+    const latestTradeAgeHours = latestTradeAt ? (Date.now() - latestTradeAt.getTime()) / 3_600_000 : null;
     await this.send([
       `${ICON.chart} <b>OBSIDRA STATUS</b>`,
       `Status: <b>${escapeTelegramHtml(state?.status ?? "STOPPED")}</b>`,
@@ -364,6 +379,11 @@ export class TelegramNotifier {
       `PnL Today: <b>${formatSigned(pnl)} USDT</b>`,
       `Trades Today: <b>${todayTrades.length}</b>`,
       `Win Rate Today: <b>${todayTrades.length ? ((wins / todayTrades.length) * 100).toFixed(1) : "0.0"}%</b>`,
+      "",
+      `<b>WHY NO TRADE</b>`,
+      `Latest Signal: <b>${escapeTelegramHtml(latestSignalSymbol)} / ${escapeTelegramHtml(latestSignalReason)}</b>`,
+      `Circuit: <b>${escapeTelegramHtml(String(latestSignalDetails.circuitBreakerReason ?? latestSignalDetails.remainingCooldownMinutes ?? "OK/Waiting"))}</b>`,
+      `Last Trade: <b>${escapeTelegramHtml(latestTrade ? `${latestTrade.symbol} ${latestTrade.status}` : "none")}</b>${latestTradeAgeHours === null ? "" : ` (${latestTradeAgeHours.toFixed(1)}h ago)`}`,
       `Last Update: <b>${new Date().toISOString()}</b>`,
     ].join("\n"));
   }

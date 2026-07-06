@@ -59,6 +59,7 @@ export interface DeepHealth {
     params: Record<string, unknown>;
   }>;
   pullbackControl?: PullbackControl | null;
+  noTradeDiagnostics?: NoTradeDiagnostics | null;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
@@ -82,6 +83,46 @@ export interface DeepHealth {
   actionableRiskRejected24h?: number;
   latestSignalEvent: { type: string; data: unknown; createdAt: string } | null;
   timestamp: string;
+}
+
+export interface NoTradeDiagnostics {
+  summary: string;
+  generatedAt: string;
+  signalsReady24h: number;
+  signalsSkipped24h: number;
+  lastTradeAgeHours: number | null;
+  items: NoTradeDiagnosticItem[];
+}
+
+export interface NoTradeDiagnosticItem {
+  strategyId: string;
+  type: string;
+  exchange: string;
+  symbol: string;
+  mode: string;
+  status: "READY" | "WAITING" | "COOLING_DOWN" | "PROTECTED" | "MANAGING" | "PAUSED" | "FILTERED" | "SCANNING" | string;
+  reason: string;
+  nextAction: string;
+  latestSignal: {
+    type: string;
+    createdAt: string;
+    ageMinutes: number;
+    reason: string;
+  } | null;
+  lossStreak: number;
+  lastClosedTrade: {
+    pnlUsdt: number | null;
+    pnlPct: number | null;
+    closeReason: string | null;
+    closedAt: string | null;
+  } | null;
+  checklist?: Array<{ name: string; passed: boolean; detail: string }>;
+  edgeScore?: number;
+  nextCheckAt?: string | null;
+  healthLevel?: string;
+  healthReason?: string;
+  blockedUntil?: string | null;
+  remainingCooldownMinutes?: number | null;
 }
 
 export interface LossBrainItem {
