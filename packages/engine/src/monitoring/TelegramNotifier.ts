@@ -59,6 +59,42 @@ export function formatSigned(value: number, decimals = 2): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}`;
 }
 
+function record(value: unknown): Record<string, any> {
+  return value && typeof value === "object" ? value as Record<string, any> : {};
+}
+
+function symbolFromJournal(data: unknown): string {
+  const root = record(data);
+  const signal = record(root.signal);
+  const details = record(root.details);
+  return String(root.symbol ?? signal.symbol ?? details.symbol ?? "UNKNOWN");
+}
+
+function reasonFromSignal(type: string, data: unknown): string {
+  const root = record(data);
+  const details = record(root.details);
+  const reason = String(root.reason ?? root.decision?.reason ?? type);
+  if (reason === "CIRCUIT_BREAKER") return `circuit breaker - ${String(details.circuitBreakerReason ?? "safety pause")}`;
+  if (reason === "NO_TREND") return `waiting trend | ADX ${formatMaybe(details.adx)} / need ${formatMaybe(details.requiredAdx)}`;
+  if (type === "SIGNAL_READY" || type === "SIGNAL_GENERATED") return "READY - waiting risk/execution";
+  return reason.replaceAll("_", " ").toLowerCase();
+}
+
+function reasonFromRisk(data: unknown): string {
+  const root = record(data);
+  const decision = record(root.decision);
+  return String(decision.reason ?? "Risk gate rejected");
+}
+
+function consecutiveLossesForSymbol(trades: Array<{ pnlUsdt: number | null }>): number {
+  const firstNonLoss = trades.findIndex((trade) => (trade.pnlUsdt ?? 0) >= 0);
+  return firstNonLoss === -1 ? trades.length : firstNonLoss;
+}
+
+function formatMaybe(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(value >= 10 ? 1 : 3) : "n/a";
+}
+
 function formatTelegramDate(timestamp?: number): string {
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -94,6 +130,7 @@ export class TelegramNotifier {
     await this.request("setMyCommands", {
       commands: [
         { command: "status", description: "Status bot si activitate" },
+        { command: "why", description: "De ce nu intra in trade" },
         { command: "positions", description: "Pozitii deschise" },
         { command: "pnl", description: "Profit si pierderi" },
         { command: "trades", description: "Ultimele tranzactii" },
@@ -272,6 +309,9 @@ export class TelegramNotifier {
         case "/equity":
           await this.sendDatabaseStatus();
           return;
+        case "/why":
+          await this.sendWhyNoTrade();
+          return;
         case "/positions":
           await this.sendPositions();
           return;
@@ -328,6 +368,7 @@ export class TelegramNotifier {
       "",
       "<b>Monitorizare</b>",
       "/status - stare bot si PnL azi",
+      "/why - de ce nu intra in trade acum",
       "/positions - pozitii deschise",
       "/pnl - performanta azi / 7 zile / total",
       "/trades - ultimele tranzactii",
@@ -409,6 +450,56 @@ export class TelegramNotifier {
         `Strategy: ${escapeTelegramHtml(trade.strategyId)}`,
       ]),
     ].join("\n"));
+  }
+
+  private async sendWhyNoTrade(): Promise<void> {
+    const since24h = new Date(Date.now() - 86_400_000);
+    const [state, openTrades, signals, riskRejects, lastTrades] = await Promise.all([
+      prisma.botState.findUnique({ where: { id: "singleton" } }),
+      prisma.trade.findMany({
+        where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } },
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+      }),
+      prisma.journalEntry.findMany({
+        where: { type: { in: ["SIGNAL_READY", "SIGNAL_SKIPPED", "SIGNAL_GENERATED", "RISK_REJECTED"] }, createdAt: { gte: since24h } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.journalEntry.findMany({
+        where: { type: "RISK_REJECTED", createdAt: { gte: since24h } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.trade.findMany({
+        where: { status: "CLOSED", pnlUsdt: { not: null } },
+        orderBy: { closedAt: "desc" },
+        take: 50,
+        select: { symbol: true, pnlUsdt: true, closeReason: true },
+      }),
+    ]);
+    const symbols = ["BTCUSDT", "ETHUSDT", "DOGEUSDT"];
+    const lines = symbols.map((symbol) => {
+      const open = openTrades.find((trade) => trade.symbol === symbol);
+      if (open) return `${ICON.position} <b>${symbol}</b>: managing ${escapeTelegramHtml(open.direction)} ${escapeTelegramHtml(open.status)}`;
+      const risk = riskRejects.find((entry) => symbolFromJournal(entry.data) === symbol);
+      if (risk) return `${ICON.lock} <b>${symbol}</b>: risk blocked - ${escapeTelegramHtml(reasonFromRisk(risk.data))}`;
+      const signal = signals.find((entry) => symbolFromJournal(entry.data) === symbol);
+      if (signal) {
+        const reason = reasonFromSignal(signal.type, signal.data);
+        return `${signal.type === "SIGNAL_READY" || signal.type === "SIGNAL_GENERATED" ? ICON.success : ICON.warning} <b>${symbol}</b>: ${escapeTelegramHtml(reason)}`;
+      }
+      const lossStreak = consecutiveLossesForSymbol(lastTrades.filter((trade) => trade.symbol === symbol));
+      return `${ICON.chart} <b>${symbol}</b>: scanning${lossStreak >= 3 ? ` | loss streak ${lossStreak}` : ""}`;
+    });
+    await this.send([
+      `${ICON.bot} <b>WHY NO TRADE</b>`,
+      `Status: <b>${escapeTelegramHtml(state?.status ?? "UNKNOWN")}</b>`,
+      "",
+      ...lines,
+      "",
+      "Dashboard: <b>Mission Control → Why no trade + Risk Gate</b>",
+    ].join("\n"), { dedupeKey: `manual-why:${Date.now()}`, dedupeMs: 0 });
   }
 
   private async sendPnl(): Promise<void> {

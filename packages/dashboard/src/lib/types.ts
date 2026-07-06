@@ -60,6 +60,7 @@ export interface DeepHealth {
   }>;
   pullbackControl?: PullbackControl | null;
   noTradeDiagnostics?: NoTradeDiagnostics | null;
+  riskGateDiagnostics?: RiskGateDiagnostics | null;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
@@ -123,6 +124,29 @@ export interface NoTradeDiagnosticItem {
   healthReason?: string;
   blockedUntil?: string | null;
   remainingCooldownMinutes?: number | null;
+}
+
+export interface RiskGateDiagnostics {
+  level: "CLEAR" | "WATCH" | string;
+  summary: string;
+  generatedAt: string;
+  items: RiskGateDiagnosticItem[];
+}
+
+export interface RiskGateDiagnosticItem {
+  strategyId: string;
+  symbol: string;
+  exchange: string;
+  type: string;
+  level: "CLEAR" | "WATCH" | "COOLDOWN" | "CONFLICT" | "REJECTED" | string;
+  rejectCount24h: number;
+  latestReason: string;
+  latestRejectedAt: string | null;
+  latestSignalScore: number | null;
+  latestDirection: string | null;
+  lossStreak: number;
+  openExposureUsdt: number;
+  nextAction: string;
 }
 
 export interface LossBrainItem {

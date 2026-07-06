@@ -7,6 +7,7 @@ import { MetricsCards } from "../components/MetricsCards";
 import { ObsidraCommandCenter } from "../components/ObsidraCommandCenter";
 import { OpenTradeMonitor } from "../components/OpenTradeMonitor";
 import { SignalFeed } from "../components/SignalFeed";
+import { RiskGatePanel } from "../components/RiskGatePanel";
 import { TradeReplayPanel } from "../components/TradeReplayPanel";
 import { TradeTable } from "../components/TradeTable";
 import { WhyNoTradePanel } from "../components/WhyNoTradePanel";
@@ -43,6 +44,7 @@ export function Overview({ metrics, trades, signals }: { metrics: Metrics; trade
     <div className="space-y-6">
       <ObsidraCommandCenter metrics={metrics} trades={trades} signals={signals} />
       <WhyNoTradePanel />
+      <RiskGatePanel />
       <OpenTradeMonitor />
 
       <section className="hero-grid">

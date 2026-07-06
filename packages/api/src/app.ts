@@ -155,7 +155,7 @@ export function createApp() {
         prisma.journalEntry.count({ where: { type: "RISK_REJECTED", createdAt: { gte: since24h } } }),
         prisma.journalEntry.findMany({
           where: { type: "RISK_REJECTED", createdAt: { gte: since24h } },
-          select: { data: true },
+          select: { data: true, createdAt: true },
           take: 250,
         }),
         prisma.journalEntry.findFirst({
@@ -193,6 +193,12 @@ export function createApp() {
         signalsSkipped24h,
         lastTradeAgeHours,
       });
+      const riskGateDiagnostics = buildRiskGateDiagnostics({
+        strategies: activeStrategies,
+        riskRejectedEvents: riskRejectedEvents24h,
+        recentClosedTrades,
+        openTrades: openTrades.map(publicTradeSummary),
+      });
       response.json({
         ok: true,
         service: "obsidra-api",
@@ -203,6 +209,7 @@ export function createApp() {
         activeStrategies,
         pullbackControl,
         noTradeDiagnostics,
+        riskGateDiagnostics,
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
@@ -448,7 +455,77 @@ type RecentClosedTrade = {
   closedAt: Date | null;
 };
 
+type RiskRejectedEvent = {
+  data: unknown;
+  createdAt: Date;
+};
+
 type PublicTradeSummary = ReturnType<typeof publicTradeSummary>;
+
+function buildRiskGateDiagnostics(input: {
+  strategies: ActiveStrategy[];
+  riskRejectedEvents: RiskRejectedEvent[];
+  recentClosedTrades: RecentClosedTrade[];
+  openTrades: PublicTradeSummary[];
+}) {
+  const items = input.strategies.map((strategy) => {
+    const symbolEvents = input.riskRejectedEvents.filter((event) => {
+      const data = signalRecord(event.data);
+      const signal = signalRecord(data.signal);
+      return signal.symbol === strategy.symbol || data.symbol === strategy.symbol;
+    });
+    const latest = symbolEvents[0] ?? null;
+    const latestData = latest ? signalRecord(latest.data) : {};
+    const latestDecision = signalRecord(latestData.decision);
+    const latestSignal = signalRecord(latestData.signal);
+    const recentClosed = input.recentClosedTrades.filter((trade) => trade.exchange === strategy.exchange && trade.symbol === strategy.symbol);
+    const lossStreak = consecutiveLosses(recentClosed);
+    const openExposure = input.openTrades
+      .filter((trade) => trade.exchange === strategy.exchange)
+      .reduce((sum, trade) => sum + trade.positionSizeUsdt, 0);
+    const reason = stringOrNull(latestDecision.reason) ?? "No risk rejection in the last 24h";
+    const level = latest
+      ? reason.toLowerCase().includes("cooldown") ? "COOLDOWN"
+        : reason.toLowerCase().includes("open position") ? "CONFLICT"
+          : "REJECTED"
+      : "CLEAR";
+    return {
+      strategyId: strategy.id,
+      symbol: strategy.symbol,
+      exchange: strategy.exchange,
+      type: strategy.type,
+      level,
+      rejectCount24h: symbolEvents.length,
+      latestReason: reason,
+      latestRejectedAt: latest?.createdAt ?? null,
+      latestSignalScore: safeNumber(latestSignal.score),
+      latestDirection: stringOrNull(latestSignal.direction),
+      lossStreak,
+      openExposureUsdt: openExposure,
+      nextAction: riskGateNextAction(reason, lossStreak, symbolEvents.length),
+    };
+  });
+  const rejected = items.filter((item) => item.level !== "CLEAR").length;
+  return {
+    level: rejected ? "WATCH" : "CLEAR",
+    summary: rejected
+      ? `${rejected} strategy has risk-gate rejection context in the last 24h.`
+      : "Risk gate is clear: no actionable risk rejects in the last 24h.",
+    generatedAt: new Date().toISOString(),
+    items,
+  };
+}
+
+function riskGateNextAction(reason: string, lossStreak: number, rejectCount: number): string {
+  const lower = reason.toLowerCase();
+  if (rejectCount === 0) return lossStreak >= 3 ? "Watch reduced sizing/cooldown after the loss streak." : "Risk gate is clear; wait for signal approval.";
+  if (lower.includes("cooldown")) return "Let cooldown expire; bot should auto-retry on the next clean signal.";
+  if (lower.includes("risk/reward")) return "Wait for a wider target or tighter stop before entering.";
+  if (lower.includes("position sizing")) return "Position sizing is too small for current stop distance; wait for cleaner volatility.";
+  if (lower.includes("open position")) return "Existing position/strategy conflict must clear before another entry.";
+  if (lower.includes("drawdown") || lower.includes("daily loss")) return "Capital protection is active; do not force entries.";
+  return "Review latest signal context; risk gate is protecting execution.";
+}
 
 function buildNoTradeDiagnostics(input: {
   strategies: ActiveStrategy[];
