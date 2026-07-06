@@ -160,11 +160,20 @@ export class SignalEngine {
         details: { price, priceSource, ema21, ema55, adx: adxValue, requiredAdx: idle.requiredAdx, idleHours: idle.idleHours, scoreRelaxation: idle.scoreRelaxation },
       };
     }
-    if (this.circuitBreaker.state.active) {
+    const circuitBreakerState = this.circuitBreaker.state;
+    if (circuitBreakerState.active) {
       return {
         signal: null,
         reason: "CIRCUIT_BREAKER",
-        details: { direction, circuitBreakerReason: this.circuitBreaker.state.reason ?? "unknown" },
+        details: {
+          direction,
+          circuitBreakerReason: circuitBreakerState.reason ?? "unknown",
+          blockedUntil: circuitBreakerState.blockedUntil?.toISOString() ?? null,
+          remainingCooldownMinutes: circuitBreakerState.remainingCooldownMs === undefined
+            ? null
+            : Math.ceil(circuitBreakerState.remainingCooldownMs / 60_000),
+          consecutiveLosses: circuitBreakerState.consecutiveLosses,
+        },
       };
     }
     const closes = m15.map((c) => c.close);

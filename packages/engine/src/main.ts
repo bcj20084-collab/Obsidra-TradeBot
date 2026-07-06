@@ -138,6 +138,10 @@ async function handleTradeClosed(trade: Parameters<TelegramNotifier["tradeClosed
         symbol: context.symbol,
         reason: breakerState.reason,
         consecutiveLosses: breakerState.consecutiveLosses,
+        blockedUntil: breakerState.blockedUntil?.toISOString(),
+        remainingCooldownMinutes: breakerState.remainingCooldownMs === undefined
+          ? undefined
+          : Math.ceil(breakerState.remainingCooldownMs / 60_000),
         pnlUsdt: trade.pnlUsdt,
       });
     }
@@ -684,6 +688,10 @@ async function logEngineHeartbeat(): Promise<void> {
         m15Candles: context.store.getCandles(context.symbol, "15").length,
         regime: context.adaptive.snapshot.regime,
         circuitBreaker: context.circuitBreaker.state.active,
+        circuitBreakerReason: context.circuitBreaker.state.reason ?? null,
+        circuitBreakerRemainingMinutes: context.circuitBreaker.state.remainingCooldownMs === undefined
+          ? null
+          : Math.ceil(context.circuitBreaker.state.remainingCooldownMs / 60_000),
       };
     });
     premiumLog("engine", "engine_heartbeat", {
