@@ -232,6 +232,7 @@ export class TelegramNotifier {
 
   alert(title: string, details: string, dedupeKey: string): Promise<void> {
     const isSignal = title.toUpperCase().includes("SIGNAL READY");
+    if (isSignal) return Promise.resolve();
     const icon = isSignal ? ICON.buy : ICON.warning;
     return this.send(
       `${icon} <b>${escapeTelegramHtml(title)}</b>\n${escapeTelegramHtml(details)}`,

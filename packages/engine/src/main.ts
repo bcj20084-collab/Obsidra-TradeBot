@@ -412,7 +412,7 @@ async function bootstrap(): Promise<void> {
     ["Binance market data", binanceMarketDataTestnet ? "testnet" : "mainnet"],
     ["Telegram", telegram.configured ? "connected" : "disabled"],
   ]);
-  if (telegram.configured) {
+  if (telegram.configured && await shouldSendStartupTelegram()) {
     const breakerSummary = [...contexts.values()]
       .map((context) => {
         const breaker = context.circuitBreaker.state;
@@ -426,8 +426,30 @@ async function bootstrap(): Promise<void> {
       `Strategies: <b>${activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"}</b>`,
       `Circuit breakers: <b>${breakerSummary || "OK"}</b>`,
       "Dashboard: <b>/status pentru raport manual</b>",
-    ].join("\n")).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
+    ].join("\n"), { dedupeKey: "startup:bot-on", dedupeMs: 30 * 60_000 }).then(() => recordStartupTelegramSent()).catch((error) => log.warn({ error }, "startup Telegram notification failed"));
   }
+}
+
+async function shouldSendStartupTelegram(): Promise<boolean> {
+  const recent = await prisma.botEvent.findFirst({
+    where: {
+      type: "TELEGRAM_BOT_ON_SENT",
+      createdAt: { gte: new Date(Date.now() - 30 * 60_000) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  return !recent;
+}
+
+async function recordStartupTelegramSent(): Promise<void> {
+  await prisma.botEvent.create({
+    data: {
+      type: "TELEGRAM_BOT_ON_SENT",
+      message: "Startup Telegram notification sent",
+      data: { dedupeMinutes: 30 },
+    },
+  });
 }
 
 function subscribeStrategies(): void {
