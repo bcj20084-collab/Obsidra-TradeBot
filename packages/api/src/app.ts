@@ -235,6 +235,13 @@ export function createApp() {
         riskGateDiagnostics,
         readyWatchdog,
         operatorReport24h,
+        debugFindings: buildDebugFindings({
+          pullbackControl,
+          readyWatchdog,
+          operatorReport24h,
+          riskGateDiagnostics,
+          openPositionsCount,
+        }),
         uptimeSeconds: Math.round(process.uptime()),
         openPositionsCount,
         latestTrade,
@@ -258,6 +265,7 @@ export function createApp() {
         openTrades: openTrades.map(publicTradeSummary),
         recentTrades6h: recentTrades6h.map(publicTradeSummary),
         recentClosedTrades6h: recentTrades6h.filter((trade) => trade.closedAt).length,
+        closedTrades24h: closedTrades24h.map(publicClosedTrade24h),
         latestLossBrain: publicLossBrain.slice(0, 5),
         autoTuner: buildAutoTuner(publicLossBrain),
         lastTradeAgeHours,
@@ -423,6 +431,19 @@ function publicTradeSummary(trade: {
     closedAt: trade.closedAt,
     updatedAt: trade.updatedAt,
     protection: publicPaperProtection(trade.signalData),
+  };
+}
+
+function publicClosedTrade24h(trade: ClosedTrade24h) {
+  return {
+    symbol: trade.symbol,
+    exchange: trade.exchange,
+    strategyId: trade.strategyId,
+    pnlUsdt: trade.pnlUsdt,
+    pnlPct: trade.pnlPct,
+    feeUsdt: trade.feeUsdt,
+    closeReason: trade.closeReason,
+    closedAt: trade.closedAt,
   };
 }
 
@@ -631,6 +652,69 @@ function summarizeReportSymbols(trades: ClosedTrade24h[]) {
   return [...map.values()].sort((a, b) => Math.abs(b.pnlUsdt) - Math.abs(a.pnlUsdt)).slice(0, 8);
 }
 
+function buildDebugFindings(input: {
+  pullbackControl: Awaited<ReturnType<typeof buildPullbackControl>>;
+  readyWatchdog: ReturnType<typeof buildReadyWatchdog>;
+  operatorReport24h: ReturnType<typeof buildOperatorReport24h>;
+  riskGateDiagnostics: RiskGateDiagnosticsResult;
+  openPositionsCount: number;
+}) {
+  const findings: Array<{ level: "OK" | "WATCH" | "BUG" | "INFO"; area: string; message: string; nextAction: string }> = [];
+  if (input.pullbackControl?.dataFreshness.isStale) {
+    findings.push({
+      level: "BUG",
+      area: "market-data",
+      message: `${input.pullbackControl.symbol} ${input.pullbackControl.timeframe} candle data is stale by ${input.pullbackControl.dataFreshness.staleByMinutes ?? "?"}m.`,
+      nextAction: "Check WebSocket candle ingestion and historical candle persistence for this symbol/timeframe.",
+    });
+  }
+  if (input.readyWatchdog.level === "WATCH") {
+    findings.push({
+      level: "WATCH",
+      area: "execution",
+      message: input.readyWatchdog.summary,
+      nextAction: "Inspect SignalEngine -> RiskEngine -> OrderManager path before strategy changes.",
+    });
+  }
+  if (input.riskGateDiagnostics.level !== "CLEAR") {
+    findings.push({
+      level: "INFO",
+      area: "risk-gate",
+      message: input.riskGateDiagnostics.summary,
+      nextAction: "Separate normal guardrails from actionable rejects; do not relax risk while paper PnL is negative.",
+    });
+  }
+  if (input.operatorReport24h.trades > 0 && input.operatorReport24h.pnlUsdt < 0) {
+    findings.push({
+      level: "WATCH",
+      area: "paper-performance",
+      message: `Paper PnL 24h is ${input.operatorReport24h.pnlUsdt.toFixed(2)} USDT across ${input.operatorReport24h.trades} closed trades.`,
+      nextAction: "Debug first; strategy remediation comes after confirming execution and data are healthy.",
+    });
+  }
+  if (input.openPositionsCount > 0 && input.operatorReport24h.lastTradeAgeHours !== null && input.operatorReport24h.lastTradeAgeHours < 0.25) {
+    findings.push({
+      level: "OK",
+      area: "position-monitor",
+      message: "Open position monitoring is updating recently.",
+      nextAction: "Continue monitoring SL/TP/timeout handling.",
+    });
+  }
+  if (!findings.length) {
+    findings.push({
+      level: "OK",
+      area: "system",
+      message: "No runtime debug findings detected from health diagnostics.",
+      nextAction: "Proceed to strategy remediation once enough sample trades are collected.",
+    });
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    level: findings.some((finding) => finding.level === "BUG") ? "BUG" : findings.some((finding) => finding.level === "WATCH") ? "WATCH" : "OK",
+    findings,
+  };
+}
+
 function buildRiskGateDiagnostics(input: {
   strategies: ActiveStrategy[];
   riskRejectedEvents: RiskRejectedEvent[];
@@ -726,7 +810,7 @@ function buildNoTradeDiagnostics(input: {
     }
     if (pullback) {
       const failed = pullback.checklist.filter((check) => !check.passed);
-      const status = pullback.status === "SETUP_READY" ? "READY" : pullback.autoPauseRecommended ? "PROTECTED" : "WAITING";
+      const status = pullback.status === "SETUP_READY" ? "READY" : pullback.status === "DATA_STALE" ? "DATA_STALE" : pullback.autoPauseRecommended ? "PROTECTED" : "WAITING";
       return {
         ...diagnosticItem(
           strategy,
@@ -914,9 +998,14 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
   const trendPct = latest && fast !== null && slow !== null ? (Math.abs(fast - slow) / latest.close) * 100 : null;
   const longReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast > slow && currentRsi <= rsiLongBelow && latest.close > slow);
   const shortReady = Boolean(latest && fast !== null && slow !== null && currentRsi !== null && fast < slow && currentRsi >= rsiShortAbove && latest.close < slow);
-  const direction = longReady ? "LONG" : shortReady ? "SHORT" : "WAITING";
+  const nextCloseAtDate = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)) : null;
+  const staleByMinutes = nextCloseAtDate ? Math.max(0, Math.round((Date.now() - nextCloseAtDate.getTime()) / 60_000)) : null;
+  const isDataStale = Boolean(staleByMinutes !== null && staleByMinutes > Math.max(15, intervalMs(timeframe) / 60_000 * 0.1));
+  const direction = isDataStale ? "WAITING" : longReady ? "LONG" : shortReady ? "SHORT" : "WAITING";
   const reason = pullbackReason({
     candles: candles.length,
+    dataStale: isDataStale,
+    staleByMinutes,
     latestClose: latest?.close ?? null,
     fast,
     slow,
@@ -950,9 +1039,11 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     atrPct,
     riskRewardPreview,
     healthLevel: performanceGuard.level,
+    dataStale: isDataStale,
+    staleByMinutes,
   });
   const edgeScore = pullbackEdgeScore(checklist, trendPct, currentRsi, direction, performanceGuard.level);
-  const nextCloseAt = latest ? new Date(Number(latest.openTime) + intervalMs(timeframe)).toISOString() : null;
+  const nextCloseAt = nextCloseAtDate ? nextCloseAtDate.toISOString() : null;
   const forwardReport = pullbackForwardReport({
     trades: recentTrades.map((trade) => trade.pnlUsdt ?? 0),
     winRate: recentTrades.length ? (wins.length / recentTrades.length) * 100 : null,
@@ -965,12 +1056,18 @@ async function buildPullbackControl(strategy: ActiveStrategy | undefined) {
     exchange: strategy.exchange,
     mode: strategy.mode,
     timeframe,
-    status: direction === "WAITING" ? "WAITING" : "SETUP_READY",
+    status: isDataStale ? "DATA_STALE" : direction === "WAITING" ? "WAITING" : "SETUP_READY",
     direction,
     reason,
     candleCount: candles.length,
     latestCandleAt: latest ? new Date(Number(latest.openTime)).toISOString() : null,
     nextCandleCloseAt: nextCloseAt,
+    dataFreshness: {
+      isStale: isDataStale,
+      staleByMinutes,
+      expectedNextCandleAt: nextCloseAt,
+      checkedAt: new Date().toISOString(),
+    },
     price: latest?.close ?? null,
     emaFast: fast,
     emaSlow: slow,
@@ -1018,6 +1115,8 @@ function pullbackChecklist(input: {
   atrPct: number | null;
   riskRewardPreview: number | null;
   healthLevel: string;
+  dataStale: boolean;
+  staleByMinutes: number | null;
 }) {
   const bullish = input.fast !== null && input.slow !== null && input.fast > input.slow;
   const bearish = input.fast !== null && input.slow !== null && input.fast < input.slow;
@@ -1036,6 +1135,7 @@ function pullbackChecklist(input: {
   );
   return [
     { name: "Data ready", passed: input.candleCount >= 120, detail: `${input.candleCount}/120 DOGE 4H candles` },
+    { name: "Data freshness", passed: !input.dataStale, detail: input.dataStale ? `Latest candle is stale by ${input.staleByMinutes ?? "?"}m` : "Latest candle is fresh" },
     { name: "No active pullback trade", passed: !input.openTrade, detail: input.openTrade ? "Trade already open" : "Ready for next setup" },
     { name: "Daily cap available", passed: input.tradesToday < input.maxDailyTrades, detail: `${input.tradesToday}/${input.maxDailyTrades} trades today` },
     { name: "EMA trend aligned", passed: trendAligned, detail: bullish ? "Bullish EMA trend" : bearish ? "Bearish EMA trend" : "Flat EMA trend" },
@@ -1138,6 +1238,8 @@ function forwardSummary(level: string, tradeCount: number, winRate: number | nul
 
 function pullbackReason(input: {
   candles: number;
+  dataStale: boolean;
+  staleByMinutes: number | null;
   latestClose: number | null;
   fast: number | null;
   slow: number | null;
@@ -1149,6 +1251,7 @@ function pullbackReason(input: {
   openTrade: boolean;
   direction: string;
 }): string {
+  if (input.dataStale) return `Market data stale: latest pullback candle is ${input.staleByMinutes ?? "?"}m behind expected close.`;
   if (input.openTrade) return "Pullback trade is already open.";
   if (input.tradesToday >= input.maxDailyTrades) return `Daily cap reached (${input.tradesToday}/${input.maxDailyTrades}).`;
   if (input.candles < 120) return `Warming DOGE 4H data (${input.candles}/120 candles).`;

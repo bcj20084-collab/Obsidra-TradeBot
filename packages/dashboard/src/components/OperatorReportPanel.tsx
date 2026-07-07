@@ -28,6 +28,7 @@ export function OperatorReportPanel() {
 
   const report = health?.operatorReport24h;
   const watchdog = health?.readyWatchdog;
+  const debug = health?.debugFindings;
   const watch = watchdog?.level === "WATCH";
 
   return (
@@ -54,6 +55,30 @@ export function OperatorReportPanel() {
         <ReportStat icon={BarChart3} label="Trades" value={String(report?.trades ?? 0)} detail={`${report?.wins ?? 0}W / ${report?.losses ?? 0}L`} />
         <ReportStat icon={RadioTower} label="Signals" value={`${report?.signalsReady24h ?? health?.signalsReady24h ?? 0} ready`} detail={`${report?.signalsSkipped24h ?? health?.signalsSkipped24h ?? 0} skipped`} />
         <ReportStat icon={Clock3} label="Last trade" value={formatHours(report?.lastTradeAgeHours ?? health?.lastTradeAgeHours ?? null)} detail={`${report?.riskRejected24h ?? health?.riskRejected24h ?? 0} risk rejects`} />
+      </div>
+
+      <div className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="label">Debug findings</div>
+            <div className="mt-2 text-2xl font-black text-white">{debug?.level ?? "SYNCING"}</div>
+          </div>
+          <span className={`pill ${debug?.level === "BUG" ? "pill-danger" : debug?.level === "WATCH" ? "bg-amber-400/15 text-amber-100" : "pill-success"}`}>
+            {(debug?.findings?.length ?? 0)} checks
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {(debug?.findings ?? []).slice(0, 4).map((finding) => (
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4" key={`${finding.area}:${finding.message}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{finding.area}</div>
+                <span className={`pill ${finding.level === "BUG" ? "pill-danger" : finding.level === "WATCH" ? "bg-amber-400/15 text-amber-100" : finding.level === "OK" ? "pill-success" : ""}`}>{finding.level}</span>
+              </div>
+              <p className="mt-3 text-sm font-bold leading-6 text-white">{finding.message}</p>
+              <p className="mt-2 text-xs leading-5 text-slate-500">{finding.nextAction}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_.9fr]">

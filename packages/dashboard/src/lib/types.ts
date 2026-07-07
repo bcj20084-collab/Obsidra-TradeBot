@@ -63,6 +63,7 @@ export interface DeepHealth {
   riskGateDiagnostics?: RiskGateDiagnostics | null;
   readyWatchdog?: ReadyWatchdog | null;
   operatorReport24h?: OperatorReport24h | null;
+  debugFindings?: DebugFindings | null;
   uptimeSeconds: number;
   openPositionsCount: number;
   latestTrade: { symbol: string; status: string; updatedAt: string; closedAt: string | null } | null;
@@ -76,6 +77,7 @@ export interface DeepHealth {
     closedAt: string | null;
   }>;
   recentClosedTrades6h?: number;
+  closedTrades24h?: ClosedTrade24h[];
   latestLossBrain?: LossBrainItem[];
   autoTuner?: AutoTunerItem[];
   lastTradeAgeHours: number | null;
@@ -86,6 +88,28 @@ export interface DeepHealth {
   actionableRiskRejected24h?: number;
   latestSignalEvent: { type: string; data: unknown; createdAt: string } | null;
   timestamp: string;
+}
+
+export interface DebugFindings {
+  generatedAt: string;
+  level: "OK" | "WATCH" | "BUG" | string;
+  findings: Array<{
+    level: "OK" | "WATCH" | "BUG" | "INFO" | string;
+    area: string;
+    message: string;
+    nextAction: string;
+  }>;
+}
+
+export interface ClosedTrade24h {
+  symbol: string;
+  exchange: string;
+  strategyId: string;
+  pnlUsdt: number | null;
+  pnlPct: number | null;
+  feeUsdt: number | null;
+  closeReason: string | null;
+  closedAt: string | null;
 }
 
 export interface NoTradeDiagnostics {
@@ -103,7 +127,7 @@ export interface NoTradeDiagnosticItem {
   exchange: string;
   symbol: string;
   mode: string;
-  status: "READY" | "WAITING" | "COOLING_DOWN" | "PROTECTED" | "MANAGING" | "PAUSED" | "FILTERED" | "SCANNING" | string;
+  status: "READY" | "WAITING" | "DATA_STALE" | "COOLING_DOWN" | "PROTECTED" | "MANAGING" | "PAUSED" | "FILTERED" | "SCANNING" | string;
   reason: string;
   nextAction: string;
   latestSignal: {
@@ -234,6 +258,12 @@ export interface PullbackControl {
   candleCount: number;
   latestCandleAt: string | null;
   nextCandleCloseAt: string | null;
+  dataFreshness: {
+    isStale: boolean;
+    staleByMinutes: number | null;
+    expectedNextCandleAt: string | null;
+    checkedAt: string;
+  };
   price: number | null;
   emaFast: number | null;
   emaSlow: number | null;
