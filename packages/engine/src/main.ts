@@ -44,6 +44,7 @@ const binanceStore = new MarketDataStore();
 const marketStores = new Map<ExchangeId, MarketDataStore>([["bybit", bybitStore], ["binance", binanceStore]]);
 const bybitPaper = activeDescriptors.filter((item) => item.exchange === "bybit").every((item) => item.isPaperTrading);
 const binancePaper = activeDescriptors.filter((item) => item.exchange === "binance").every((item) => item.isPaperTrading);
+const binanceMarketDataTestnet = env.BINANCE_TESTNET && !binancePaper;
 const bybitCredentialCandidates = buildBybitCredentialCandidates();
 const client = new BybitRestClient(
   bybitCredentialCandidates[0]?.apiKey ?? "",
@@ -60,12 +61,12 @@ const bybitAdapter = new BybitAdapter(client, websocket, bybitStore, env.PAPER_F
 const binanceRest = new BinanceRestClient(
   env.BINANCE_API_KEY,
   env.BINANCE_API_SECRET,
-  env.BINANCE_TESTNET,
+  binanceMarketDataTestnet,
   binancePaper,
   env.PAPER_FEE_RATE,
   env.PAPER_SLIPPAGE_BPS,
 );
-const binanceWebsocket = new BinanceWebSocket(env.BINANCE_TESTNET);
+const binanceWebsocket = new BinanceWebSocket(binanceMarketDataTestnet);
 const binanceAdapter = new BinanceAdapter(binanceRest, binanceWebsocket);
 const exchanges = new ExchangeRouter([bybitAdapter, binanceAdapter]);
 const telegram = new TelegramNotifier(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID);
@@ -390,6 +391,7 @@ async function bootstrap(): Promise<void> {
   premiumLog("engine", "engine_started", {
     status,
     bybitEnvironment: env.BYBIT_DEMO ? "demo" : env.BYBIT_TESTNET ? "testnet" : "mainnet",
+    binanceMarketData: binanceMarketDataTestnet ? "testnet" : "mainnet",
     executionMode: bybitPaper ? "PAPER" : env.BYBIT_DEMO ? "DEMO" : "LIVE",
     symbols,
     strategies: activeDescriptors.map((item) => ({
@@ -407,6 +409,7 @@ async function bootstrap(): Promise<void> {
     ["Strategies", activeDescriptors.map((item) => `${item.type}:${item.symbol}`).join(", ") || "none"],
     ["Bybit credentials", bybitPaper ? "not required in PAPER" : bybitCredentialCandidates.map((item) => item.source).join(" -> ") || "missing"],
     ["Binance credentials", binancePaper ? "not required in PAPER" : env.BINANCE_API_KEY ? "BINANCE_API_KEY" : "missing"],
+    ["Binance market data", binanceMarketDataTestnet ? "testnet" : "mainnet"],
     ["Telegram", telegram.configured ? "connected" : "disabled"],
   ]);
   if (telegram.configured) {
