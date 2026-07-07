@@ -26,6 +26,40 @@ export interface RestorableDcaPosition {
   totalInvestedUsdt: number;
 }
 
+export interface CoordinatorRestorePrisma {
+  trade: {
+    findMany(args: { where: { status: { in: string[] } } }): Promise<RestorableTrade[]>;
+  };
+  gridLevel: {
+    findMany(args: { where: { status: string } }): Promise<RestorableGridLevel[]>;
+  };
+  dCAPosition: {
+    findMany(args: { where: { status: { in: string[] }; totalInvestedUsdt: { gt: number } } }): Promise<RestorableDcaPosition[]>;
+  };
+}
+
+export async function restoreCoordinatorState(params: {
+  prisma: CoordinatorRestorePrisma;
+  coordinator: StrategyCoordinator;
+  descriptors: StrategyDescriptor[];
+  watchTradeClose?: (trade: RestorableTrade) => void;
+}): Promise<void> {
+  const [openTrades, gridLevels, dcaPositions] = await Promise.all([
+    params.prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
+    params.prisma.gridLevel.findMany({ where: { status: "ACTIVE" } }),
+    params.prisma.dCAPosition.findMany({ where: { status: { in: ["ACTIVE", "WAITING"] }, totalInvestedUsdt: { gt: 0 } } }),
+  ]);
+  const restoreParams: Parameters<typeof restoreStrategyCoordinator>[0] = {
+    coordinator: params.coordinator,
+    descriptors: params.descriptors,
+    openTrades,
+    gridLevels,
+    dcaPositions,
+  };
+  if (params.watchTradeClose) restoreParams.watchTradeClose = params.watchTradeClose;
+  restoreStrategyCoordinator(restoreParams);
+}
+
 export function restoreStrategyCoordinator(params: {
   coordinator: StrategyCoordinator;
   descriptors: StrategyDescriptor[];

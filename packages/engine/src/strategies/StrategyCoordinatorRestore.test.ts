@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StrategyDescriptor } from "@obsidra/shared";
 import { StrategyCoordinator } from "./StrategyCoordinator.js";
-import { restoreStrategyCoordinator } from "./StrategyCoordinatorRestore.js";
+import { restoreCoordinatorState, restoreStrategyCoordinator } from "./StrategyCoordinatorRestore.js";
 
 describe("restoreStrategyCoordinator", () => {
   it("rebuilds in-memory conflicts from open trades, grid levels and DCA positions after restart", () => {
@@ -36,6 +36,41 @@ describe("restoreStrategyCoordinator", () => {
     expect(coordinator.check("binance", "BTCUSDT", "DCA", "LONG", 10, "dca-btc").approved).toBe(false);
     expect(coordinator.check("bybit", "ETHUSDT", "TREND", "SHORT", 10, "trend-eth").approved).toBe(false);
     expect(watchTradeClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads startup state from Prisma before live trading can open conflicting positions", async () => {
+    const coordinator = new StrategyCoordinator(false, 1_000);
+    const watchTradeClose = vi.fn();
+    const descriptors = [
+      descriptor("trend-btcusdt", "TREND", "bybit", "BTCUSDT"),
+      descriptor("grid-ethusdt", "GRID", "binance", "ETHUSDT"),
+      descriptor("dca-ethusdt", "DCA", "binance", "ETHUSDT"),
+    ];
+    const prisma = {
+      trade: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: "open-btc", exchange: "bybit", symbol: "BTCUSDT", strategyId: "trend-btcusdt", direction: "LONG", positionSizeUsdt: 200 },
+        ]),
+      },
+      gridLevel: {
+        findMany: vi.fn().mockResolvedValue([
+          { exchange: "binance", symbol: "ETHUSDT", strategyId: "grid-ethusdt", orderSizeUsdt: 80 },
+        ]),
+      },
+      dCAPosition: {
+        findMany: vi.fn().mockResolvedValue([
+          { exchange: "binance", symbol: "ETHUSDT", strategyId: "dca-ethusdt", direction: "LONG", totalInvestedUsdt: 120 },
+        ]),
+      },
+    };
+
+    await restoreCoordinatorState({ prisma, coordinator, descriptors, watchTradeClose });
+
+    expect(prisma.trade.findMany).toHaveBeenCalledWith({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } });
+    expect(prisma.gridLevel.findMany).toHaveBeenCalledWith({ where: { status: "ACTIVE" } });
+    expect(prisma.dCAPosition.findMany).toHaveBeenCalledWith({ where: { status: { in: ["ACTIVE", "WAITING"] }, totalInvestedUsdt: { gt: 0 } } });
+    expect(coordinator.check("bybit", "BTCUSDT", "SCALP", "LONG", 10, "scalp-after-restart").approved).toBe(false);
+    expect(watchTradeClose).toHaveBeenCalledWith(expect.objectContaining({ id: "open-btc" }));
   });
 });
 

@@ -1,11 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { moduleLogger, prisma } from "@obsidra/shared";
-import type { OHLCVCandle } from "../../exchanges/IExchangeAdapter.js";
+import type { OHLCVCandle, OrderResult } from "../../exchanges/IExchangeAdapter.js";
 import type { ExchangeRouter } from "../../exchanges/ExchangeRouter.js";
 import { BaseStrategy } from "../BaseStrategy.js";
 import type { StrategyDependencies } from "../StrategyFactory.js";
 
 const log = moduleLogger("DCAStrategy");
+
+interface DcaFill {
+  exchangeOrderId: string;
+  fillPrice: number;
+  filledQty: number;
+  feeUsdt: number;
+  investedUsdt: number;
+}
 
 export class DCAStrategy extends BaseStrategy {
   private positionId: string | undefined;
@@ -83,23 +91,11 @@ export class DCAStrategy extends BaseStrategy {
         log.warn({ strategyId: this.config.id, reason: approval.reason }, "DCA base order rejected");
         return;
       }
-      const quantity = baseOrderUsdt / candle.close;
       const targetProfitPct = Number(params.targetProfitPct ?? 1.5) / 100;
       const stopLossPct = Number(params.stopLossPct ?? 10) / 100;
-      await prisma.dCAPosition.update({
-        where: { id: this.positionId },
-        data: {
-          status: "ACTIVE",
-          averageEntryPrice: candle.close,
-          totalQty: quantity,
-          totalInvestedUsdt: baseOrderUsdt,
-          targetPrice: direction === "LONG" ? candle.close * (1 + targetProfitPct) : candle.close * (1 - targetProfitPct),
-          stopLossPrice: direction === "LONG" ? candle.close * (1 - stopLossPct) : candle.close * (1 + stopLossPct),
-          cycleStartedAt: new Date(),
-        },
-      });
+      let fill: DcaFill;
       try {
-        await this.placeOrder(candle.close, baseOrderUsdt, direction, "base");
+        fill = await this.placeOrder(candle.close, baseOrderUsdt, direction, "base", this.positionId);
       } catch (error) {
         await prisma.dCAPosition.update({
           where: { id: this.positionId },
@@ -108,8 +104,20 @@ export class DCAStrategy extends BaseStrategy {
         this.pause();
         throw error;
       }
+      await prisma.dCAPosition.update({
+        where: { id: this.positionId },
+        data: {
+          status: "ACTIVE",
+          averageEntryPrice: fill.fillPrice,
+          totalQty: fill.filledQty,
+          totalInvestedUsdt: fill.investedUsdt,
+          targetPrice: direction === "LONG" ? fill.fillPrice * (1 + targetProfitPct) : fill.fillPrice * (1 - targetProfitPct),
+          stopLossPrice: direction === "LONG" ? fill.fillPrice * (1 - stopLossPct) : fill.fillPrice * (1 + stopLossPct),
+          cycleStartedAt: new Date(),
+        },
+      });
       this.dependencies?.registerOpen(this.config, direction as "LONG" | "SHORT", baseOrderUsdt);
-      this.lastOrderPrice = candle.close;
+      this.lastOrderPrice = fill.fillPrice;
       return;
     }
     const safetyOrderCount = Number(params.safetyOrderCount ?? 5);
@@ -129,34 +137,17 @@ export class DCAStrategy extends BaseStrategy {
       return;
     }
     const current = await prisma.dCAPosition.findUniqueOrThrow({ where: { id: this.positionId } });
-    const addedQty = safetyOrderUsdt / candle.close;
-    const totalQty = current.totalQty + addedQty;
-    const totalInvestedUsdt = current.totalInvestedUsdt + safetyOrderUsdt;
-    const averageEntryPrice = totalQty > 0 ? totalInvestedUsdt / totalQty : candle.close;
     const targetProfitPct = Number(params.targetProfitPct ?? 1.5) / 100;
     const stopLossPct = Number(params.stopLossPct ?? 10) / 100;
-    await prisma.$transaction([
-      prisma.dCAPosition.update({
-        where: { id: this.positionId },
-        data: {
-          status: "ACTIVE",
-          safetyOrdersFilled: { increment: 1 },
-          averageEntryPrice,
-          totalQty,
-          totalInvestedUsdt,
-          targetPrice: direction === "LONG" ? averageEntryPrice * (1 + targetProfitPct) : averageEntryPrice * (1 - targetProfitPct),
-          stopLossPrice: direction === "LONG" ? averageEntryPrice * (1 - stopLossPct) : averageEntryPrice * (1 + stopLossPct),
-        },
-      }),
-      prisma.journalEntry.create({
-        data: {
-          type: "DCA_SAFETY_ORDER_INTENT",
-          data: { strategyId: this.config.id, price: candle.close, sizeUsdt: safetyOrderUsdt, nextSafetyOrder: this.safetyOrders + 1 },
-        },
-      }),
-    ]);
+    await prisma.journalEntry.create({
+      data: {
+        type: "DCA_SAFETY_ORDER_INTENT",
+        data: { strategyId: this.config.id, positionId: this.positionId, price: candle.close, sizeUsdt: safetyOrderUsdt, nextSafetyOrder: this.safetyOrders + 1 },
+      },
+    });
+    let fill: DcaFill;
     try {
-      await this.placeOrder(candle.close, safetyOrderUsdt, direction, `safety-${this.safetyOrders + 1}`);
+      fill = await this.placeOrder(candle.close, safetyOrderUsdt, direction, `safety-${this.safetyOrders + 1}`, this.positionId);
     } catch (error) {
       await prisma.dCAPosition.update({
         where: { id: this.positionId },
@@ -171,12 +162,27 @@ export class DCAStrategy extends BaseStrategy {
       this.pause();
       throw error;
     }
+    const totalQty = current.totalQty + fill.filledQty;
+    const totalInvestedUsdt = current.totalInvestedUsdt + fill.investedUsdt;
+    const averageEntryPrice = totalQty > 0 ? totalInvestedUsdt / totalQty : fill.fillPrice;
+    await prisma.dCAPosition.update({
+      where: { id: this.positionId },
+      data: {
+        status: "ACTIVE",
+        safetyOrdersFilled: { increment: 1 },
+        averageEntryPrice,
+        totalQty,
+        totalInvestedUsdt,
+        targetPrice: direction === "LONG" ? averageEntryPrice * (1 + targetProfitPct) : averageEntryPrice * (1 - targetProfitPct),
+        stopLossPrice: direction === "LONG" ? averageEntryPrice * (1 - stopLossPct) : averageEntryPrice * (1 + stopLossPct),
+      },
+    });
     this.safetyOrders += 1;
     this.dependencies?.registerOpen(this.config, direction as "LONG" | "SHORT", safetyOrderUsdt);
-    this.lastOrderPrice = candle.close;
+    this.lastOrderPrice = fill.fillPrice;
   }
 
-  private async placeOrder(price: number, sizeUsdt: number, direction: string, suffix: string): Promise<void> {
+  private async placeOrder(price: number, sizeUsdt: number, direction: string, suffix: string, positionId: string): Promise<DcaFill> {
     const result = await this.exchanges.placeOrder(this.config.exchange, {
       symbol: this.config.symbol,
       side: direction === "SHORT" ? "Sell" : "Buy",
@@ -184,14 +190,29 @@ export class DCAStrategy extends BaseStrategy {
       qty: Number((sizeUsdt / price).toFixed(6)),
       clientOrderId: `dca-${suffix}-${randomUUID()}`.slice(0, 36),
     });
+    const fill = dcaFillFromOrderResult(result, price, sizeUsdt);
     await prisma.journalEntry.create({
-      data: { type: "DCA_ORDER_PLACED", data: { strategyId: this.config.id, exchangeOrderId: result.exchangeOrderId, price, sizeUsdt } },
+      data: {
+        type: "DCA_ORDER_PLACED",
+        data: {
+          strategyId: this.config.id,
+          positionId,
+          exchangeOrderId: result.exchangeOrderId,
+          intendedPrice: price,
+          intendedSizeUsdt: sizeUsdt,
+          avgFillPrice: fill.fillPrice,
+          filledQty: fill.filledQty,
+          filledNotionalUsdt: fill.investedUsdt,
+          feeUsdt: fill.feeUsdt,
+        },
+      },
     });
+    return fill;
   }
 
   private async tryCloseCycle(
     price: number,
-    position: { id: string; totalQty: number; averageEntryPrice: number | null; targetPrice: number | null; stopLossPrice: number | null },
+    position: { id: string; totalQty: number; averageEntryPrice: number | null; targetPrice: number | null; stopLossPrice: number | null; cycleStartedAt?: Date | null },
     direction: string,
   ): Promise<boolean> {
     const targetHit = position.targetPrice !== null && (direction === "LONG" ? price >= position.targetPrice : price <= position.targetPrice);
@@ -211,8 +232,12 @@ export class DCAStrategy extends BaseStrategy {
         reduceOnly: true,
         clientOrderId: `dca-close-${randomUUID()}`.slice(0, 36),
       });
-      const entry = position.averageEntryPrice ?? price;
-      const pnl = direction === "LONG" ? (price - entry) * position.totalQty : (entry - price) * position.totalQty;
+      const closeFill = dcaFillFromOrderResult(result, price, Math.max(0, (position.averageEntryPrice ?? price) * position.totalQty));
+      const entry = position.averageEntryPrice ?? closeFill.fillPrice;
+      const closedQty = closeFill.filledQty || position.totalQty;
+      const grossPnl = direction === "LONG" ? (closeFill.fillPrice - entry) * closedQty : (entry - closeFill.fillPrice) * closedQty;
+      const entryFees = await this.entryFeesForPosition(position.id, position.cycleStartedAt ?? null);
+      const pnl = grossPnl - entryFees - closeFill.feeUsdt;
       const cooldownMinutes = Number(this.config.params.cooldownMinutes ?? 60);
       await prisma.dCAPosition.update({
         where: { id: position.id },
@@ -224,7 +249,21 @@ export class DCAStrategy extends BaseStrategy {
         },
       });
       await prisma.journalEntry.create({
-        data: { type: "DCA_CYCLE_CLOSED", data: { strategyId: this.config.id, reason, pnl, exchangeOrderId: result.exchangeOrderId } },
+        data: {
+          type: "DCA_CYCLE_CLOSED",
+          data: {
+            strategyId: this.config.id,
+            positionId: position.id,
+            reason,
+            pnl,
+            grossPnl,
+            entryFeesUsdt: entryFees,
+            exitFeeUsdt: closeFill.feeUsdt,
+            avgFillPrice: closeFill.fillPrice,
+            filledQty: closeFill.filledQty,
+            exchangeOrderId: result.exchangeOrderId,
+          },
+        },
       });
       this.dependencies?.unregisterOpen(this.config);
       this.positionId = undefined;
@@ -236,4 +275,37 @@ export class DCAStrategy extends BaseStrategy {
       throw error;
     }
   }
+
+  private async entryFeesForPosition(positionId: string, cycleStartedAt: Date | null): Promise<number> {
+    const rows = await prisma.journalEntry.findMany({
+      where: {
+        type: "DCA_ORDER_PLACED",
+        ...(cycleStartedAt ? { createdAt: { gte: cycleStartedAt } } : {}),
+      },
+      select: { data: true },
+      take: 100,
+    });
+    return rows.reduce((sum, row) => {
+      const data = row.data && typeof row.data === "object" ? row.data as Record<string, unknown> : {};
+      if (data.positionId !== positionId) return sum;
+      const fee = typeof data.feeUsdt === "number" && Number.isFinite(data.feeUsdt) ? data.feeUsdt : 0;
+      return sum + fee;
+    }, 0);
+  }
+}
+
+function dcaFillFromOrderResult(result: OrderResult, fallbackPrice: number, fallbackSizeUsdt: number): DcaFill {
+  const fillPrice = result.avgFillPrice && Number.isFinite(result.avgFillPrice) && result.avgFillPrice > 0
+    ? result.avgFillPrice
+    : fallbackPrice;
+  const filledQty = result.filledQty && Number.isFinite(result.filledQty) && result.filledQty > 0
+    ? result.filledQty
+    : fallbackSizeUsdt / Math.max(fillPrice, Number.EPSILON);
+  return {
+    exchangeOrderId: result.exchangeOrderId,
+    fillPrice,
+    filledQty,
+    feeUsdt: Number.isFinite(result.feeUsdt) ? result.feeUsdt : 0,
+    investedUsdt: fillPrice * filledQty,
+  };
 }

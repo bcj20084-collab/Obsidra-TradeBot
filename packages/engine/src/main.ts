@@ -28,7 +28,7 @@ import { SignalEngine } from "./signals/SignalEngine.js";
 import { MLTrainer } from "./signals/MLTrainer.js";
 import { createStrategy } from "./strategies/StrategyFactory.js";
 import { StrategyCoordinator } from "./strategies/StrategyCoordinator.js";
-import { restoreStrategyCoordinator } from "./strategies/StrategyCoordinatorRestore.js";
+import { restoreCoordinatorState } from "./strategies/StrategyCoordinatorRestore.js";
 import type { ExchangeId, IExchangeAdapter } from "./exchanges/IExchangeAdapter.js";
 import type { ApiCredential } from "./security/ApiKeyManager.js";
 
@@ -489,17 +489,10 @@ async function dispatchStrategyCandle(exchange: "bybit" | "binance", candle: Par
 }
 
 async function restoreCoordinator(): Promise<void> {
-  const [open, gridLevels, dcaPositions] = await Promise.all([
-    prisma.trade.findMany({ where: { status: { in: ["OPEN", "FILLED", "CLOSING"] } } }),
-    prisma.gridLevel.findMany({ where: { status: "ACTIVE" } }),
-    prisma.dCAPosition.findMany({ where: { status: { in: ["ACTIVE", "WAITING"] }, totalInvestedUsdt: { gt: 0 } } }),
-  ]);
-  restoreStrategyCoordinator({
+  await restoreCoordinatorState({
+    prisma,
     coordinator,
     descriptors,
-    openTrades: open,
-    gridLevels,
-    dcaPositions,
     watchTradeClose: (trade) => void watchTradeClose(trade.id, trade.exchange as ExchangeId, trade.symbol, trade.strategyId),
   });
 }
